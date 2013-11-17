@@ -1,0 +1,1384 @@
+From b90de837f37fc1369818bb0ccd5fda9166e9e0b6 Mon Sep 17 00:00:00 2001
+From: "[CST] Focus" <focus.cst@gmail.com>
+Date: Tue, 16 Oct 2012 20:09:25 +0400
+Subject: [PATCH 07/16] drivers/net/arcvmac.c: update to latest driver version
+
+---
+ drivers/net/arcvmac.c |  522 ++++++++++++++++++++++++-------------------------
+ drivers/net/arcvmac.h |   34 ++--
+ 2 files changed, 280 insertions(+), 276 deletions(-)
+
+diff --git a/drivers/net/arcvmac.c b/drivers/net/arcvmac.c
+index 4ff469c..9e25308 100644
+--- a/drivers/net/arcvmac.c
++++ b/drivers/net/arcvmac.c
+@@ -1,10 +1,7 @@
+ /*
+  * ARC VMAC Driver
+  *
+- * Copyright (C) 2003-2006 Codito Technologies, for linux-2.4 port
+- * Copyright (C) 2006-2007 Celunite Inc, for linux-2.6 port
+- * Copyright (C) 2007-2008 Sagem Communications, Fehmi Hafsi
+- * Copyright (C) 2009-2011 Sagem Communications, Andreas Fenkart
++ * Copyright (C) 2009-2012 Andreas Fenkart
+  * All Rights Reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+@@ -21,8 +18,13 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+- * external PHY support based on dnet.c
+- * ring management based on bcm63xx_enet.c
++ * Initial work taken from arc linux distribution, any bugs are mine
++ *
++ *	-----<snip>-----
++ * Copyright (C) 2003-2006 Codito Technologies, for linux-2.4 port
++ * Copyright (C) 2006-2007 Celunite Inc, for linux-2.6 port
++ * Authors: amit.bhor@celunite.com, sameer.dhavale@celunite.com
++ *	-----<snip>-----
+  */
+ 
+ #include <linux/clk.h>
+@@ -31,6 +33,7 @@
+ #include <linux/dma-mapping.h>
+ #include <linux/etherdevice.h>
+ #include <linux/init.h>
++#include <linux/interrupt.h>
+ #include <linux/io.h>
+ #include <linux/kernel.h>
+ #include <linux/module.h>
+@@ -51,12 +54,14 @@
+ 
+ static int get_register_map(struct vmac_priv *ap);
+ static int put_register_map(struct vmac_priv *ap);
++static void update_vmac_stats_unlocked(struct net_device *dev);
++static int vmac_tx_reclaim_unlocked(struct net_device *dev, bool force);
+ 
+ static unsigned char *read_mac_reg(struct net_device *dev,
+-		unsigned char hwaddr[ETH_ALEN])
++				   unsigned char hwaddr[ETH_ALEN])
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+-	unsigned mac_lo, mac_hi;
++	u32 mac_lo, mac_hi;
+ 
+ 	WARN_ON(!hwaddr);
+ 	mac_lo = vmac_readl(ap, ADDRL);
+@@ -74,7 +79,7 @@ static unsigned char *read_mac_reg(struct net_device *dev,
+ static void write_mac_reg(struct net_device *dev, unsigned char* hwaddr)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+-	unsigned mac_lo, mac_hi;
++	u32 mac_lo, mac_hi;
+ 
+ 	mac_lo = hwaddr[3] << 24 | hwaddr[2] << 16 | hwaddr[1] << 8 |
+ 		hwaddr[0];
+@@ -84,7 +89,7 @@ static void write_mac_reg(struct net_device *dev, unsigned char* hwaddr)
+ 	vmac_writel(ap, mac_hi, ADDRH);
+ }
+ 
+-static void vmac_mdio_xmit(struct vmac_priv *ap, unsigned val)
++static void vmac_mdio_xmit(struct vmac_priv *ap, u32 val)
+ {
+ 	init_completion(&ap->mdio_complete);
+ 	vmac_writel(ap, val, MDIO_DATA);
+@@ -94,7 +99,7 @@ static void vmac_mdio_xmit(struct vmac_priv *ap, unsigned val)
+ static int vmac_mdio_read(struct mii_bus *bus, int phy_id, int phy_reg)
+ {
+ 	struct vmac_priv *vmac = bus->priv;
+-	unsigned int val;
++	u32 val;
+ 
+ 	/* only 5 bits allowed for phy-addr and reg_offset */
+ 	WARN_ON(phy_id & ~0x1f || phy_reg & ~0x1f);
+@@ -108,10 +113,10 @@ static int vmac_mdio_read(struct mii_bus *bus, int phy_id, int phy_reg)
+ }
+ 
+ static int vmac_mdio_write(struct mii_bus *bus, int phy_id, int phy_reg,
+-			 u16 value)
++			   u16 value)
+ {
+ 	struct vmac_priv *vmac = bus->priv;
+-	unsigned int val;
++	u32 val;
+ 
+ 	/* only 5 bits allowed for phy-addr and reg_offset */
+ 	WARN_ON(phy_id & ~0x1f || phy_reg & ~0x1f);
+@@ -129,12 +134,12 @@ static void vmac_handle_link_change(struct net_device *dev)
+ 	struct vmac_priv *ap = netdev_priv(dev);
+ 	struct phy_device *phydev = ap->phy_dev;
+ 	unsigned long flags;
+-	int report_change = 0;
++	bool report_change = false;
+ 
+ 	spin_lock_irqsave(&ap->lock, flags);
+ 
+ 	if (phydev->duplex != ap->duplex) {
+-		unsigned tmp;
++		u32 tmp;
+ 
+ 		tmp = vmac_readl(ap, ENABLE);
+ 
+@@ -146,17 +151,17 @@ static void vmac_handle_link_change(struct net_device *dev)
+ 		vmac_writel(ap, tmp, ENABLE);
+ 
+ 		ap->duplex = phydev->duplex;
+-		report_change = 1;
++		report_change = true;
+ 	}
+ 
+ 	if (phydev->speed != ap->speed) {
+ 		ap->speed = phydev->speed;
+-		report_change = 1;
++		report_change = true;
+ 	}
+ 
+ 	if (phydev->link != ap->link) {
+ 		ap->link = phydev->link;
+-		report_change = 1;
++		report_change = true;
+ 	}
+ 
+ 	spin_unlock_irqrestore(&ap->lock, flags);
+@@ -189,8 +194,8 @@ static int __devinit vmac_mii_probe(struct net_device *dev)
+ 	/* FIXME: add pin_irq, if avail */
+ 
+ 	phydev = phy_connect(dev, dev_name(&phydev->dev),
+-			&vmac_handle_link_change, 0,
+-			PHY_INTERFACE_MODE_MII);
++			     &vmac_handle_link_change, 0,
++			     PHY_INTERFACE_MODE_MII);
+ 
+ 	if (IS_ERR(phydev)) {
+ 		err = PTR_ERR(phydev);
+@@ -211,12 +216,11 @@ static int __devinit vmac_mii_probe(struct net_device *dev)
+ 	clk_put(vmac_clk);
+ #endif
+ 	clock_rate = 25 * 1000 * 1000;
+-
+-	dev_info(&ap->pdev->dev, "vmac_clk: %lu Hz\n", clock_rate);
++	dev_dbg(&ap->pdev->dev, "vmac_clk: %lu Hz\n", clock_rate);
+ 
+ 	if (clock_rate < 25000000)
+ 		phydev->supported &= ~(SUPPORTED_100baseT_Half |
+-				SUPPORTED_100baseT_Full);
++				       SUPPORTED_100baseT_Full);
+ 
+ 	phydev->advertising = phydev->supported;
+ 
+@@ -227,25 +231,30 @@ static int __devinit vmac_mii_probe(struct net_device *dev)
+ 
+ 	return 0;
+ 
++#if 0
+ err_disconnect:
+ 	phy_disconnect(phydev);
++#endif
+ err_out:
+ 	return err;
+ }
+ 
+ static int __devinit vmac_mii_init(struct vmac_priv *ap)
+ {
++	unsigned long flags;
+ 	int err, i;
+ 
++	//spin_lock_irqsave(&ap->lock, flags);
++
+ 	ap->mii_bus = mdiobus_alloc();
+-	if (ap->mii_bus == NULL)
++	if (!ap->mii_bus)
+ 		return -ENOMEM;
+ 
+ 	ap->mii_bus->name = "vmac_mii_bus";
+ 	ap->mii_bus->read = &vmac_mdio_read;
+ 	ap->mii_bus->write = &vmac_mdio_write;
+ 
+-	snprintf(ap->mii_bus->id, MII_BUS_ID_SIZE, "arvmac_mii_bus%x", 0);
++	snprintf(ap->mii_bus->id, MII_BUS_ID_SIZE, "%x", 0);
+ 
+ 	ap->mii_bus->priv = ap;
+ 
+@@ -257,6 +266,8 @@ static int __devinit vmac_mii_init(struct vmac_priv *ap)
+ 	for (i = 0; i < PHY_MAX_ADDR; i++)
+ 		ap->mii_bus->irq[i] = PHY_POLL;
+ 
++	//spin_unlock_irqrestore(&ap->lock, flags);
++
+ 	/* locking: mdio concurrency */
+ 
+ 	err = mdiobus_register(ap->mii_bus);
+@@ -291,7 +302,7 @@ static void vmac_mii_exit_unlocked(struct net_device *dev)
+ }
+ 
+ static int vmacether_get_settings(struct net_device *dev,
+-		struct ethtool_cmd *cmd)
++				  struct ethtool_cmd *cmd)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+ 	struct phy_device *phydev = ap->phy_dev;
+@@ -303,7 +314,7 @@ static int vmacether_get_settings(struct net_device *dev,
+ }
+ 
+ static int vmacether_set_settings(struct net_device *dev,
+-		struct ethtool_cmd *cmd)
++				  struct ethtool_cmd *cmd)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+ 	struct phy_device *phydev = ap->phy_dev;
+@@ -325,25 +336,26 @@ static int vmac_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
+ 	if (!phydev)
+ 		return -ENODEV;
+ 
+-	return phy_mii_ioctl(phydev, if_mii(rq) /*rq*/, cmd);
++	return phy_mii_ioctl(phydev, if_mii(rq), cmd);
+ }
+ 
+ static void vmacether_get_drvinfo(struct net_device *dev,
+-		struct ethtool_drvinfo *info)
++				  struct ethtool_drvinfo *info)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+ 
+ 	strlcpy(info->driver, DRV_NAME, sizeof(info->driver));
+ 	strlcpy(info->version, DRV_VERSION, sizeof(info->version));
+ 	snprintf(info->bus_info, sizeof(info->bus_info),
+-			"platform 0x%pP", &ap->mem->start);
++		 "platform 0x%pP", &ap->mem->start);
+ }
+ 
+ static int update_error_counters_unlocked(struct net_device *dev, int status)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
++
+ 	dev_dbg(&ap->pdev->dev, "rx error counter overrun. status = 0x%x\n",
+-			status);
++		status);
+ 
+ 	/* programming error */
+ 	WARN_ON(status & TXCH_MASK);
+@@ -384,16 +396,16 @@ static void update_tx_errors_unlocked(struct net_device *dev, int status)
+ 		dev->stats.tx_carrier_errors++;
+ }
+ 
+-static noinline int vmac_rx_reclaim_force_unlocked(struct net_device *dev)
++static int vmac_rx_reclaim_force_unlocked(struct net_device *dev)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+ 	int ct;
+ 
+-	/* locking: no conurrency, runs only during shutdown */
++	/* locking: no concurrency, runs only during shutdown */
+ 	WARN_ON(!ap->shutdown);
+ 
+ 	dev_dbg(&ap->pdev->dev, "need to release %d rx sk_buff\n",
+-			fifo_used(&ap->rx_ring));
++		fifo_used(&ap->rx_ring));
+ 
+ 	ct = 0;
+ 	while (!fifo_empty(&ap->rx_ring) && ct++ < ap->rx_ring.size) {
+@@ -406,24 +418,24 @@ static noinline int vmac_rx_reclaim_force_unlocked(struct net_device *dev)
+ 		fifo_inc_tail(&ap->rx_ring);
+ 
+ 		if (!ap->rx_skbuff[desc_idx]) {
+-			dev_err(&ap->pdev->dev, "non-populated rx_skbuff found %d\n",
+-					desc_idx);
++			dev_err(&ap->pdev->dev,
++				"non-populated rx_skbuff found %d\n",
++				desc_idx);
+ 			continue;
+ 		}
+ 
+ 		skb = ap->rx_skbuff[desc_idx];
+ 		ap->rx_skbuff[desc_idx] = NULL;
+ 
+-		dma_unmap_single(&ap->pdev->dev, desc->data, ap->rx_skb_size,
+-		    DMA_FROM_DEVICE);
++		dma_unmap_single(&ap->pdev->dev, desc->data, skb->len,
++				 DMA_TO_DEVICE);
+ 
+ 		dev_kfree_skb(skb);
+ 	}
+ 
+-	if (!fifo_empty(&ap->rx_ring)) {
++	if (!fifo_empty(&ap->rx_ring))
+ 		dev_err(&ap->pdev->dev, "failed to reclaim %d rx sk_buff\n",
+-				fifo_used(&ap->rx_ring));
+-	}
++			fifo_used(&ap->rx_ring));
+ 
+ 	return 0;
+ }
+@@ -433,9 +445,10 @@ static int vmac_rx_refill_unlocked(struct net_device *dev)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+ 
+-	/* locking: protect from refill_timer */
+-	/* locking: fct owns area outside rx_ring, head exclusive tail,
+-	 *	modifies head */
++	/* locking1: protect from refill_timer
++	 * locking2: fct owns area outside rx_ring, head exclusive tail,
++	 *	modifies head
++	 */
+ 
+ 	spin_lock(&ap->refill_lock);
+ 
+@@ -465,15 +478,16 @@ static int vmac_rx_refill_unlocked(struct net_device *dev)
+ 
+ 		skb = netdev_alloc_skb_ip_align(dev, ap->rx_skb_size);
+ 		if (!skb) {
+-			dev_info(&ap->pdev->dev, "failed to allocate rx_skb, skb's left %d\n",
+-					fifo_used(&ap->rx_ring));
++			dev_info(&ap->pdev->dev,
++				 "failed to allocate rx_skb, skb's left %d\n",
++				 fifo_used(&ap->rx_ring));
+ 			break;
+ 		}
+ 
+ 		ap->rx_skbuff[desc_idx] = skb;
+ 
+ 		p = dma_map_single(&ap->pdev->dev, skb->data, ap->rx_skb_size,
+-				DMA_FROM_DEVICE);
++				   DMA_FROM_DEVICE);
+ 
+ 		desc->data = p;
+ 
+@@ -486,7 +500,8 @@ static int vmac_rx_refill_unlocked(struct net_device *dev)
+ 	spin_unlock(&ap->refill_lock);
+ 
+ 	/* If rx ring is still empty, set a timer to try allocating
+-	 * again at a later time. */
++	 * again at a later time.
++	 */
+ 	if (fifo_empty(&ap->rx_ring) && netif_running(dev)) {
+ 		dev_warn(&ap->pdev->dev, "unable to refill rx ring\n");
+ 		ap->refill_timer.expires = jiffies + HZ;
+@@ -496,76 +511,82 @@ static int vmac_rx_refill_unlocked(struct net_device *dev)
+ 	return 0;
+ }
+ 
+-/*
+- * timer callback to defer refill rx queue in case we're OOM
+- */
++/* timer callback to defer refill rx queue in case we're OOM */
+ static void vmac_refill_rx_timer(unsigned long data)
+ {
+ 	vmac_rx_refill_unlocked((struct net_device *)data);
+ }
+ 
+ /* merge buffer chaining  */
+-struct sk_buff *vmac_merge_rx_buffers_unlocked(struct net_device *dev,
+-		struct vmac_buffer_desc *after,
+-		int pkt_len) /* data */
++static struct sk_buff *vmac_merge_rx_buffers(struct net_device *dev,
++					     struct vmac_buffer_desc *after,
++					     int pkt_len) /* data */
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+-	struct sk_buff *merge_skb, *cur_skb;
++	struct sk_buff *first_skb, **tail, *cur_skb;
+ 	struct dma_fifo *rx_ring;
+ 	struct vmac_buffer_desc *desc;
+ 
+-	/* locking: same as vmac_rx_receive */
++	/* locking1: same as vmac_rx_receive */
++	/* desc->info = le32_to_cpu(desc-info) already done */
+ 
++	first_skb = NULL;
++	tail = NULL;
+ 	rx_ring = &ap->rx_ring;
+ 	desc = &ap->rxbd[rx_ring->tail];
+ 
+ 	WARN_ON(desc == after);
+ 
+-	/* strip FCS */
+-	pkt_len -= 4;
+-
+-	merge_skb = netdev_alloc_skb_ip_align(dev, pkt_len);
+-	if (!merge_skb) {
+-		dev_err(&ap->pdev->dev, "failed to allocate merged rx_skb, rx skb's left %d\n",
+-				fifo_used(rx_ring));
+-
+-		return NULL;
+-	}
++	pkt_len -= ETH_FCS_LEN; /* this might obsolete 'after' */
+ 
+ 	while (desc != after && pkt_len) {
+-		struct vmac_buffer_desc *desc;
+ 		int buf_len, valid;
+ 
+ 		/* desc needs wrapping */
+ 		desc = &ap->rxbd[rx_ring->tail];
+ 		cur_skb = ap->rx_skbuff[rx_ring->tail];
++		ap->rx_skbuff[rx_ring->tail] = NULL;
+ 		WARN_ON(!cur_skb);
+ 
+ 		dma_unmap_single(&ap->pdev->dev, desc->data, ap->rx_skb_size,
+-				DMA_FROM_DEVICE);
++				 DMA_FROM_DEVICE);
+ 
+ 		/* do not copy FCS */
+-		buf_len = le32_to_cpu(desc->info) & BD_LEN;
++		buf_len = desc->info & BD_LEN;
+ 		valid = min(pkt_len, buf_len);
+ 		pkt_len -= valid;
+ 
+-		memcpy(skb_put(merge_skb, valid), cur_skb->data, valid);
++		skb_put(cur_skb, valid);
++
++		if (!first_skb) {
++			first_skb = cur_skb;
++			tail = &skb_shinfo(first_skb)->frag_list;
++		} else {
++			first_skb->truesize += cur_skb->truesize;
++			first_skb->data_len += valid;
++			first_skb->len += valid;
++			*tail = cur_skb;
++			tail = &cur_skb->next;
++		}
+ 
+ 		fifo_inc_tail(rx_ring);
+ 	}
+ 
+-	/* merging_pressure++ */
+-
++#ifdef DEBUG
+ 	if (unlikely(pkt_len != 0))
+ 		dev_err(&ap->pdev->dev, "buffer chaining bytes missing %d\n",
+-				pkt_len);
++			pkt_len);
+ 
+-	WARN_ON(desc != after);
++	if (desc != after) {
++		int buf_len = le32_to_cpu(after->info) & BD_LEN;
++		WARN_ON(buf_len > ETH_FCS_LEN);
++	}
++#endif
+ 
+-	return merge_skb;
++	return first_skb;
+ }
+ 
+-int vmac_rx_receive(struct net_device *dev, int budget)
++static int vmac_rx_receive(struct net_device *dev, int budget)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+ 	struct vmac_buffer_desc *first;
+@@ -573,9 +594,10 @@ int vmac_rx_receive(struct net_device *dev, int budget)
+ 	struct dma_fifo lookahead;
+ 
+ 	/* true concurrency -> DMA engine running in parallel */
+-	/* locking: fct owns rx_ring tail to current DMA read position, alias
++	/* locking1: fct owns rx_ring tail to current DMA read position, alias
+ 	 * 'received packets'. rx_refill owns area outside rx_ring, doesn't
+-	 * modify tail */
++	 * modify tail
++	 */
+ 
+ 	processed = 0;
+ 
+@@ -603,11 +625,12 @@ int vmac_rx_receive(struct net_device *dev, int budget)
+ 			break;
+ 		}
+ 
+-		if (desc->info & cpu_to_le32(BD_FRST)) {
++		desc->info = le32_to_cpu(desc->info);
++		if (desc->info & BD_FRST) {
+ 			pkt_len = 0;
+ 			pkt_err = 0;
+ 
+-			/* don't free current */
++			/* free packets up till current */
+ 			ap->rx_ring.tail = lookahead.tail;
+ 			first = desc;
+ 		}
+@@ -615,15 +638,13 @@ int vmac_rx_receive(struct net_device *dev, int budget)
+ 		fifo_inc_tail(&lookahead);
+ 
+ 		/* check bd */
++		pkt_len += desc->info & BD_LEN;
++		pkt_err |= desc->info & BD_BUFF;
+ 
+-		pkt_len += desc->info & cpu_to_le32(BD_LEN);
+-		pkt_err |= desc->info & cpu_to_le32(BD_BUFF);
+-
+-		if (!(desc->info & cpu_to_le32(BD_LAST)))
++		if (!(desc->info & BD_LAST))
+ 			continue;
+ 
+ 		/* received complete packet */
+-
+ 		if (unlikely(pkt_err || !first)) {
+ 			/* recycle buffers */
+ 			ap->rx_ring.tail = lookahead.tail;
+@@ -631,16 +652,14 @@ int vmac_rx_receive(struct net_device *dev, int budget)
+ 		}
+ 
+ #ifdef DEBUG
+-		WARN_ON(!(first->info & cpu_to_le32(BD_FRST)) ||
+-				!(desc->info & cpu_to_le32(BD_LAST)));
++		WARN_ON(!(first->info & BD_FRST) || !(desc->info & BD_LAST));
+ 		WARN_ON(pkt_err);
+ #endif
+ 
+ 		/* -- valid packet -- */
+ 
+ 		if (first != desc) {
+-			skb = vmac_merge_rx_buffers_unlocked(dev, desc,
+-					pkt_len);
++			skb = vmac_merge_rx_buffers(dev, desc, pkt_len);
+ 
+ 			if (!skb) {
+ 				/* kill packet */
+@@ -650,12 +669,11 @@ int vmac_rx_receive(struct net_device *dev, int budget)
+ 			}
+ 		} else {
+ 			dma_unmap_single(&ap->pdev->dev, desc->data,
+-					ap->rx_skb_size, DMA_FROM_DEVICE);
++					 ap->rx_skb_size, DMA_FROM_DEVICE);
+ 
+ 			skb = ap->rx_skbuff[desc_idx];
+ 			ap->rx_skbuff[desc_idx] = NULL;
+-			/* desc->data != skb->data => desc->data is DMA
+-			 * mapped */
++			/* desc->data != skb->data => desc->data DMA mapped */
+ 
+ 			/* strip FCS */
+ 			skb_put(skb, pkt_len - ETH_FCS_LEN);
+@@ -676,8 +694,8 @@ int vmac_rx_receive(struct net_device *dev, int budget)
+ 	} while (!fifo_empty(&lookahead) && (processed < budget));
+ 
+ 	dev_vdbg(&ap->pdev->dev, "processed pkt %d, remaining rx buff %d\n",
+-			processed,
+-			fifo_used(&ap->rx_ring));
++		 processed,
++		 fifo_used(&ap->rx_ring));
+ 
+ 	if (processed || fifo_empty(&ap->rx_ring))
+ 		vmac_rx_refill_unlocked(dev);
+@@ -685,11 +703,11 @@ int vmac_rx_receive(struct net_device *dev, int budget)
+ 	return processed;
+ }
+ 
+-static void vmac_toggle_irqmask_unlocked(struct net_device *dev, int enable,
+-		int mask)
++static void vmac_toggle_irqmask_unlocked(struct net_device *dev, bool enable,
++					 int mask)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+-	unsigned long tmp;
++	u32 tmp;
+ 
+ 	tmp = vmac_readl(ap, ENABLE);
+ 	if (enable)
+@@ -699,84 +717,71 @@ static void vmac_toggle_irqmask_unlocked(struct net_device *dev, int enable,
+ 	vmac_writel(ap, tmp, ENABLE);
+ }
+ 
+-static inline void vmac_toggle_txint_unlocked(struct net_device *dev, int enable)
++static void vmac_toggle_rxint_unlocked(struct net_device *dev, bool enable)
+ {
+-	vmac_toggle_irqmask_unlocked(dev, enable, TXINT_MASK);
++	vmac_toggle_irqmask_unlocked(dev, enable, RXINT_MASK);
+ }
+ 
+-static inline void vmac_toggle_rxint_unlocked(struct net_device *dev, int enable)
++static void vmac_toggle_txint_unlocked(struct net_device *dev, bool enable)
+ {
+-	vmac_toggle_irqmask_unlocked(dev, enable, RXINT_MASK);
++	vmac_toggle_irqmask_unlocked(dev, enable, TXINT_MASK);
+ }
+ 
+ static int vmac_poll(struct napi_struct *napi, int budget)
+ {
+ 	struct vmac_priv *ap;
+-	struct net_device *dev;
+ 	int rx_work_done;
+-	unsigned long flags;
+ 
+ 	ap = container_of(napi, struct vmac_priv, napi);
+-	dev = ap->dev;
+ 
+-	/* ack interrupt */
+-	spin_lock_irqsave(&ap->lock, flags);
+-	vmac_writel(ap, RXINT_MASK, STAT);
+-	spin_unlock_irqrestore(&ap->lock, flags);
+-
+-	rx_work_done = vmac_rx_receive(dev, budget);
+-
+-	if (0 && printk_ratelimit()) {
+-		dev_dbg(&ap->pdev->dev, "poll budget %d receive rx_work_done %d\n",
+-				budget,
+-				rx_work_done);
+-	}
++	vmac_tx_reclaim_unlocked(ap->dev, false);
+ 
++	rx_work_done = vmac_rx_receive(ap->dev, budget);
+ 	if (rx_work_done >= budget) {
+ 		/* rx queue is not yet empty/clean */
+ 		return rx_work_done;
+ 	}
+ 
+-	/* no more packet in rx/tx queue, remove device from poll
+-	 * queue */
+-	spin_lock_irqsave(&ap->lock, flags);
++	/* no more packet in rx/tx queue, remove device from poll queue */
+ 	napi_complete(napi);
+-	vmac_toggle_rxint_unlocked(dev, 1);
+-	spin_unlock_irqrestore(&ap->lock, flags);
++
++	/* clear status, only 1' affect register state */
++	vmac_writel(ap, RXINT_MASK | TXINT_MASK, STAT);
++
++	/* reenable IRQ */
++	vmac_toggle_rxint_unlocked(ap->dev, true);
++	vmac_toggle_txint_unlocked(ap->dev, true);
+ 
+ 	return rx_work_done;
+ }
+ 
+-static int vmac_tx_reclaim_unlocked(struct net_device *dev, int force);
+-
+ static irqreturn_t vmac_intr(int irq, void *dev_instance)
+ {
+ 	struct net_device *dev = dev_instance;
+ 	struct vmac_priv *ap = netdev_priv(dev);
+-	unsigned int status;
++	u32 status;
+ 
+ 	spin_lock(&ap->lock);
+ 
+ 	status = vmac_readl(ap, STAT);
+ 	vmac_writel(ap, status, STAT);
+ 
+-#ifdef DEBUG
+ 	if (unlikely(ap->shutdown))
+ 		dev_err(&ap->pdev->dev, "ISR during close\n");
+ 
+ 	if (unlikely(!status & (RXINT_MASK|MDIO_MASK|ERR_MASK)))
+-		dev_err(&ap->pdev->dev, "No source of IRQ found\n");
+-#endif
++		dev_err(&ap->pdev->dev, "Spurious IRQ\n");
+ 
+-	if ((status & RXINT_MASK) &&
+-			(ap->dma_rx_head !=
+-			 vmac_readl(ap, MAC_RXRING_HEAD))) {
+-		vmac_toggle_rxint_unlocked(dev, 0);
++	if ((status & RXINT_MASK) && (vmac_readl(ap, ENABLE) & RXINT_MASK) &&
++	    (ap->dma_rx_head != vmac_readl(ap, MAC_RXRING_HEAD))) {
++		vmac_toggle_rxint_unlocked(dev, false);
+ 		napi_schedule(&ap->napi);
+ 	}
+ 
+-	if (unlikely(netif_queue_stopped(dev) && (status & TXINT_MASK)))
+-		vmac_tx_reclaim_unlocked(dev, 0);
++	if ((status & TXINT_MASK) && (vmac_readl(ap, ENABLE) & TXINT_MASK)) {
++		vmac_toggle_txint_unlocked(dev, false);
++		napi_schedule(&ap->napi);
++	}
+ 
+ 	if (status & MDIO_MASK)
+ 		complete(&ap->mdio_complete);
+@@ -789,13 +794,13 @@ static irqreturn_t vmac_intr(int irq, void *dev_instance)
+ 	return IRQ_HANDLED;
+ }
+ 
+-static noinline int vmac_tx_reclaim_unlocked(struct net_device *dev, int force)
++static int vmac_tx_reclaim_unlocked(struct net_device *dev, bool force)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+ 	int released = 0;
+ 
+-	/* locking: modifies tx_ring tail, head only during shutdown */
+-	/* locking: call with ap->lock held */
++	/* locking1: modifies tx_ring tail, head only during shutdown */
++	/* locking2: call with ap->lock held */
+ 	WARN_ON(force && !ap->shutdown);
+ 
+ 	/* buffer chaining not used, see vmac_start_xmit */
+@@ -809,50 +814,44 @@ static noinline int vmac_tx_reclaim_unlocked(struct net_device *dev, int force)
+ 		desc = &ap->txbd[desc_idx];
+ 
+ 		/* ensure other field of the descriptor were not read
+-		 * before we checked ownership */
++		 * before we checked ownership
++		 */
+ 		rmb();
+ 
+ 		if ((desc->info & cpu_to_le32(BD_DMA_OWN)) && !force)
+ 			break;
+ 
+-		if (desc->info & cpu_to_le32(BD_TX_ERR)) {
+-			update_tx_errors_unlocked(dev,
+-					le32_to_cpu(desc->info));
++		if (desc->info & cpu_to_le32(BD_TX_ERR))
+ 			/* recycle packet, let upper level deal with it */
+-		}
++			update_tx_errors_unlocked(dev, le32_to_cpu(desc->info));
+ 
+ 		skb = ap->tx_skbuff[desc_idx];
+ 		ap->tx_skbuff[desc_idx] = NULL;
+ 		WARN_ON(!skb);
+ 
+ 		dma_unmap_single(&ap->pdev->dev, desc->data, skb->len,
+-				DMA_TO_DEVICE);
++				 DMA_TO_DEVICE);
+ 
+-		dev_kfree_skb_any(skb);
++		dev_kfree_skb(skb);
+ 
+ 		released++;
+ 		fifo_inc_tail(&ap->tx_ring);
+ 	}
+ 
+-	if (netif_queue_stopped(dev) && released) {
++	if (unlikely(netif_queue_stopped(dev)) && released)
+ 		netif_wake_queue(dev);
+-		vmac_toggle_txint_unlocked(dev, 0);
+-	}
+ 
+-	if (unlikely(force && !fifo_empty(&ap->tx_ring))) {
++	if (unlikely(force && !fifo_empty(&ap->tx_ring)))
+ 		dev_err(&ap->pdev->dev, "failed to reclaim %d tx sk_buff\n",
+-				fifo_used(&ap->tx_ring));
+-	}
++			fifo_used(&ap->tx_ring));
+ 
+ 	return released;
+ }
+ 
+-int vmac_start_xmit(struct sk_buff *skb, struct net_device *dev)
++static int vmac_start_xmit(struct sk_buff *skb, struct net_device *dev)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+ 	struct vmac_buffer_desc *desc;
+-	unsigned long flags;
+-	unsigned int tmp;
+ 
+ 	/* running under xmit lock */
+ 	/* locking: modifies tx_ring head, tx_reclaim only tail */
+@@ -861,32 +860,17 @@ int vmac_start_xmit(struct sk_buff *skb, struct net_device *dev)
+ 	WARN_ON(skb_shinfo(skb)->nr_frags != 0);
+ 	WARN_ON(skb->len > MAX_TX_BUFFER_LEN);
+ 
+-	/* lock device data */
+-	spin_lock_irqsave(&ap->lock, flags);
+-
+ 	if (unlikely(fifo_full(&ap->tx_ring))) {
+ 		netif_stop_queue(dev);
+-		vmac_toggle_txint_unlocked(dev, 1);
+-		/* unlock device data */
+-		spin_unlock_irqrestore(&ap->lock, flags);
+-
+-		dev_err(&ap->pdev->dev, "xmit called with no tx desc available\n");
++		dev_err(&ap->pdev->dev,
++			"xmit called while no tx desc available\n");
+ 		return NETDEV_TX_BUSY;
+ 	}
+ 
+-	/* unlock device data */
+-	spin_unlock_irqrestore(&ap->lock, flags);
+-
+ 	if (unlikely(skb->len < ETH_ZLEN)) {
+-		struct sk_buff *short_skb;
+-		short_skb = netdev_alloc_skb_ip_align(dev, ETH_ZLEN);
+-		if (!short_skb)
+-			return NETDEV_TX_LOCKED;
+-
+-		memset(short_skb->data, 0, ETH_ZLEN);
+-		memcpy(skb_put(short_skb, ETH_ZLEN), skb->data, skb->len);
+-		dev_kfree_skb(skb);
+-		skb = short_skb;
++		if (skb_padto(skb, ETH_ZLEN))
++			return NETDEV_TX_OK;
++		skb_put(skb, ETH_ZLEN - skb->len);
+ 	}
+ 
+ 	/* fill descriptor */
+@@ -895,36 +879,22 @@ int vmac_start_xmit(struct sk_buff *skb, struct net_device *dev)
+ 	WARN_ON(desc->info & cpu_to_le32(BD_DMA_OWN));
+ 
+ 	desc->data = dma_map_single(&ap->pdev->dev, skb->data, skb->len,
+-			DMA_TO_DEVICE);
++				    DMA_TO_DEVICE);
+ 
+ 	/* dma might already be polling */
+ 	wmb();
+ 	desc->info = cpu_to_le32(BD_DMA_OWN | BD_FRST | BD_LAST | skb->len);
+-	wmb();
+ 
+-	/* lock device data */
+-	spin_lock_irqsave(&ap->lock, flags);
+-
+-	/* kick tx dma */
+-	tmp = vmac_readl(ap, STAT);
+-	vmac_writel(ap, tmp | TXPL_MASK, STAT);
++	/* kick tx dma, only 1' affect register */
++	vmac_writel(ap, TXPL_MASK, STAT);
+ 
+ 	dev->stats.tx_packets++;
+ 	dev->stats.tx_bytes += skb->len;
+ 	fifo_inc_head(&ap->tx_ring);
+ 
+-	/* vmac_tx_reclaim outside of vmac_tx_timeout */
+-	if (fifo_used(&ap->tx_ring) > (TX_BDT_LEN/2))
+-		vmac_tx_reclaim_unlocked(dev, 0);
+-
+ 	/* stop queue if no more desc available */
+-	if (fifo_full(&ap->tx_ring)) {
++	if (fifo_full(&ap->tx_ring))
+ 		netif_stop_queue(dev);
+-		vmac_toggle_txint_unlocked(dev, 1);
+-	}
+-
+-	/* unlock device data */
+-	spin_unlock_irqrestore(&ap->lock, flags);
+ 
+ 	return NETDEV_TX_OK;
+ }
+@@ -932,8 +902,7 @@ int vmac_start_xmit(struct sk_buff *skb, struct net_device *dev)
+ static int alloc_buffers_unlocked(struct net_device *dev)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+-	int err = -ENOMEM;
+-	int size;
++	int size, err = -ENOMEM;
+ 
+ 	fifo_init(&ap->rx_ring, RX_BDT_LEN);
+ 	fifo_init(&ap->tx_ring, TX_BDT_LEN);
+@@ -945,17 +914,17 @@ static int alloc_buffers_unlocked(struct net_device *dev)
+ 	/* allocate DMA received descriptors */
+ 	size = sizeof(*ap->rxbd) * ap->rx_ring.size;
+ 	ap->rxbd = dma_alloc_coherent(&ap->pdev->dev, size,
+-			&ap->rxbd_dma,
+-			GFP_KERNEL);
+-	if (ap->rxbd == NULL)
++				      &ap->rxbd_dma,
++				      GFP_KERNEL);
++	if (!ap->rxbd)
+ 		goto err_out;
+ 
+ 	/* allocate DMA transmit descriptors */
+ 	size = sizeof(*ap->txbd) * ap->tx_ring.size;
+ 	ap->txbd = dma_alloc_coherent(&ap->pdev->dev, size,
+-			&ap->txbd_dma,
+-			GFP_KERNEL);
+-	if (ap->txbd == NULL)
++				      &ap->txbd_dma,
++				      GFP_KERNEL);
++	if (!ap->txbd)
+ 		goto err_free_rxbd;
+ 
+ 	/* ensure 8-byte aligned */
+@@ -973,62 +942,69 @@ static int alloc_buffers_unlocked(struct net_device *dev)
+ 
+ err_free_txbd:
+ 	dma_free_coherent(&ap->pdev->dev, sizeof(*ap->txbd) * ap->tx_ring.size,
+-			ap->txbd, ap->txbd_dma);
++			  ap->txbd, ap->txbd_dma);
+ err_free_rxbd:
+ 	dma_free_coherent(&ap->pdev->dev, sizeof(*ap->rxbd) * ap->rx_ring.size,
+-			ap->rxbd, ap->rxbd_dma);
++			  ap->rxbd, ap->rxbd_dma);
+ err_out:
+ 	return err;
+ }
+ 
+-static noinline int free_buffers_unlocked(struct net_device *dev)
++static int free_buffers_unlocked(struct net_device *dev)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+ 
+ 	/* free skbuff */
+-	vmac_tx_reclaim_unlocked(dev, 1);
++	vmac_tx_reclaim_unlocked(dev, true);
+ 	vmac_rx_reclaim_force_unlocked(dev);
+ 
+ 	/* free DMA ring */
+-	dma_free_coherent(&ap->pdev->dev, sizeof(*ap->txbd) * ap->tx_ring.size,
+-			ap->txbd, ap->txbd_dma);
+-	dma_free_coherent(&ap->pdev->dev, sizeof(*ap->rxbd) * ap->rx_ring.size,
+-			ap->rxbd, ap->rxbd_dma);
++	dma_free_coherent(&ap->pdev->dev, sizeof(ap->txbd) * ap->tx_ring.size,
++			  ap->txbd, ap->txbd_dma);
++	dma_free_coherent(&ap->pdev->dev, sizeof(ap->rxbd) * ap->rx_ring.size,
++			  ap->rxbd, ap->rxbd_dma);
+ 
+ 	return 0;
+ }
+ 
+ static int vmac_hw_init(struct net_device *dev)
+ {
+-	struct vmac_priv *priv = netdev_priv(dev);
++	struct vmac_priv *ap = netdev_priv(dev);
+ 
+ 	/* clear IRQ mask */
+-	vmac_writel(priv, 0, ENABLE);
++	vmac_writel(ap, 0, ENABLE);
+ 
+ 	/* clear pending IRQ */
+-	vmac_writel(priv, 0xffffffff, STAT);
++	vmac_writel(ap, 0xffffffff, STAT);
+ 
+ 	/* Initialize logical address filter */
+-	vmac_writel(priv, 0x0, LAFL);
+-	vmac_writel(priv, 0x0, LAFH);
++	vmac_writel(ap, 0x0, LAFL);
++	vmac_writel(ap, 0x0, LAFH);
+ 
+ 	return 0;
+ }
+ 
+-int vmac_open(struct net_device *dev)
++static int vmac_open(struct net_device *dev)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+ 	struct phy_device *phydev;
+-	unsigned int temp, ctrl;
++	unsigned long flags;
++	u32 mask, ctrl;
+ 	int err = 0;
+ 
+ 	/* locking: no concurrency yet */
+ 
+-	if (ap == NULL)
++	if (!ap)
+ 		return -ENODEV;
+ 
+-	ap->shutdown = 0;
++	//spin_lock_irqsave(&ap->lock, flags);
++	ap->shutdown = false;
+ 
++#if 0
++	err = get_register_map(ap);
++	if (err)
++		return err;
++#endif
+ 	vmac_hw_init(dev);
+ 
+ 	/* mac address changed? */
+@@ -1055,18 +1031,22 @@ int vmac_open(struct net_device *dev)
+ 	err = request_irq(dev->irq, &vmac_intr, 0, dev->name, dev);
+ 	if (err) {
+ 		dev_err(&ap->pdev->dev, "Unable to request IRQ %d (error %d)\n",
+-				dev->irq, err);
++			dev->irq, err);
+ 		goto err_free_buffers;
+ 	}
+ 
+ 	/* IRQ mask */
+-	temp = RXINT_MASK | ERR_MASK | TXCH_MASK | MDIO_MASK;
+-	vmac_writel(ap, temp, ENABLE);
++	mask = RXINT_MASK | MDIO_MASK | TXINT_MASK;
++	mask |= ERR_MASK | TXCH_MASK | MSER_MASK | RXCR_MASK | RXFR_MASK |
++		RXFL_MASK;
++	vmac_writel(ap, mask, ENABLE);
+ 
+ 	/* enable, after all other bits are set */
+ 	vmac_writel(ap, ctrl | EN_MASK, CONTROL);
++	//spin_unlock_irqrestore(&ap->lock, flags);
+ 
+ 	/* locking: concurrency */
++
+ 	netif_start_queue(dev);
+ 	netif_carrier_off(dev);
+ 
+@@ -1079,8 +1059,9 @@ int vmac_open(struct net_device *dev)
+ 	phy_start(ap->phy_dev);
+ 
+ 	phydev = ap->phy_dev;
+-	dev_info(&ap->pdev->dev, "PHY driver [%s] (mii_bus:phy_addr=%s, irq=%d)\n",
+-	       phydev->drv->name, dev_name(&phydev->dev), phydev->irq);
++	dev_info(&ap->pdev->dev,
++		 "PHY driver [%s] (mii_bus:phy_addr=%s, irq=%d)\n",
++		 phydev->drv->name, dev_name(&phydev->dev), phydev->irq);
+ 
+ 	return 0;
+ 
+@@ -1092,34 +1073,37 @@ err_free_buffers:
+ 	return err;
+ }
+ 
+-int vmac_close(struct net_device *dev)
++static int vmac_close(struct net_device *dev)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+ 	unsigned long flags;
+-	unsigned int temp;
++	u32 tmp;
+ 
+ 	netif_stop_queue(dev);
+ 	napi_disable(&ap->napi);
+ 	del_timer_sync(&ap->refill_timer);
+ 
+-	/* shut it down now */
+-	ap->shutdown = 1;
+-
+ 	/* locking: protect everything, DMA / IRQ / timer */
+ 	spin_lock_irqsave(&ap->lock, flags);
+ 
+ 	/* complete running transfer, then stop */
+-	temp = vmac_readl(ap, CONTROL);
+-	temp &= ~(TXRN_MASK | RXRN_MASK);
+-	vmac_writel(ap, temp, CONTROL);
++	tmp = vmac_readl(ap, CONTROL);
++	tmp &= ~(TXRN_MASK | RXRN_MASK);
++	vmac_writel(ap, tmp, CONTROL);
++
++	/* save statistics, before unmapping */
++	update_vmac_stats_unlocked(dev);
+ 
+ 	/* reenable IRQ, process pending */
+ 	spin_unlock_irqrestore(&ap->lock, flags);
+ 
+-	/* wait for the tasks to be finished */
+ 	set_current_state(TASK_INTERRUPTIBLE);
+ 	schedule_timeout(msecs_to_jiffies(20));
+ 
++	/* shut it down now */
++	spin_lock_irqsave(&ap->lock, flags);
++	ap->shutdown = true;
++
+ 	/* disable phy */
+ 	phy_stop(ap->phy_dev);
+ 	vmac_mii_exit_unlocked(dev);
+@@ -1133,21 +1117,30 @@ int vmac_close(struct net_device *dev)
+ 	vmac_writel(ap, 0, CONTROL);
+ 	/* vmac_reset_hw(vmac) */
+ 
++	/* locking: concurrency off */
++	spin_unlock_irqrestore(&ap->lock, flags);
++
+ 	free_buffers_unlocked(dev);
+ 
++	put_register_map(ap);
++
+ 	return 0;
+ }
+ 
+-void update_vmac_stats_unlocked(struct net_device *dev)
++static void update_vmac_stats_unlocked(struct net_device *dev)
+ {
+ 	struct net_device_stats *_stats = &dev->stats;
+ 	struct vmac_priv *ap = netdev_priv(dev);
+-	unsigned long miss, rxerr;
+-	unsigned long rxfram, rxcrc, rxoflow;
++	unsigned int rxfram, rxcrc, rxoflow;
++	u32 miss, rxerr;
+ 
+ 	/* compare with /proc/net/dev,
+ 	 * see net/core/dev.c:dev_seq_printf_stats */
+ 
++	if (ap->shutdown)
++		/* device already unmapped */
++		return;
++
+ 	/* rx stats */
+ 	rxerr = vmac_readl(ap, RXERR);
+ 	miss = vmac_readl(ap, MISS);
+@@ -1164,7 +1157,8 @@ void update_vmac_stats_unlocked(struct net_device *dev)
+ 	_stats->rx_missed_errors = 0;
+ 
+ 	/* TODO check rx_dropped/rx_errors/tx_dropped/tx_errors have not
+-	 * been updated elsewhere */
++	 * been updated elsewhere
++	 */
+ 	_stats->rx_dropped = _stats->rx_over_errors +
+ 		_stats->rx_fifo_errors +
+ 		ap->rx_merge_error;
+@@ -1186,20 +1180,23 @@ void update_vmac_stats_unlocked(struct net_device *dev)
+ 		ap->tx_timeout_error;
+ }
+ 
+-struct net_device_stats *vmac_stats(struct net_device *dev)
++static struct net_device_stats *vmac_stats(struct net_device *dev)
+ {
+-	/* struct vmac_priv *ap = netdev_priv(dev); */
++	struct vmac_priv *ap = netdev_priv(dev);
++	unsigned long flags;
+ 
++	spin_lock_irqsave(&ap->lock, flags);
+ 	update_vmac_stats_unlocked(dev);
++	spin_unlock_irqrestore(&ap->lock, flags);
+ 
+ 	return &dev->stats;
+ }
+ 
+-void vmac_tx_timeout(struct net_device *dev)
++static void vmac_tx_timeout(struct net_device *dev)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+-	unsigned int status;
+ 	unsigned long flags;
++	u32 status;
+ 
+ 	spin_lock_irqsave(&ap->lock, flags);
+ 
+@@ -1211,28 +1208,29 @@ void vmac_tx_timeout(struct net_device *dev)
+ 	status = vmac_readl(ap, STAT);
+ 	if (status & TXINT_MASK) {
+ 		dev_err(&ap->pdev->dev, "lost tx interrupt, IRQ mask %x\n",
+-				vmac_readl(ap, ENABLE));
++			vmac_readl(ap, ENABLE));
+ 		vmac_writel(ap, TXINT_MASK, STAT);
+ 	}
+ 
+ 	/* TODO RX/MDIO/ERR as well? */
+ 
+-	vmac_tx_reclaim_unlocked(dev, 0);
++	vmac_tx_reclaim_unlocked(dev, false);
+ 	if (fifo_full(&ap->tx_ring))
+ 		dev_err(&ap->pdev->dev, "DMA state machine not active\n");
+ 
+ 	/* We can accept TX packets again */
+ 	ap->tx_timeout_error++;
+-	spin_unlock_irqrestore(&ap->lock, flags);
+-
++	dev->trans_start = jiffies;
+ 	netif_wake_queue(dev);
++
++	spin_unlock_irqrestore(&ap->lock, flags);
+ }
+ 
+ static void create_multicast_filter(struct net_device *dev,
+-	unsigned long *bitmask)
++				    int32_t *bitmask)
+ {
+-	u32 crc;
+ 	char *addrs;
++	u32 crc;
+ 
+ 	/* locking: done by net_device */
+ 
+@@ -1242,7 +1240,7 @@ static void create_multicast_filter(struct net_device *dev,
+ 	bitmask[0] = bitmask[1] = 0;
+ 
+ 	{
+-		struct dev_addr_list * ha;
++		struct dev_addr_list *ha;
+ 		netdev_for_each_mc_addr(ha, dev) {
+ 			addrs = ha->da_addr;
+ 
+@@ -1250,8 +1248,9 @@ static void create_multicast_filter(struct net_device *dev,
+ 			if (!(*addrs & 1))
+ 				continue;
+ 
+-			crc = ether_crc_le(ETH_ALEN, addrs);
+-			set_bit((crc >> 26) & 0x3f, bitmask);
++			/* map to 0..63 */
++			crc = ether_crc_le(ETH_ALEN, addrs) >> 26;
++			bitmask[crc >= 32] |= 1UL << (crc & 31);
+ 		}
+ 	}
+ }
+@@ -1259,8 +1258,9 @@ static void create_multicast_filter(struct net_device *dev,
+ static void vmac_set_multicast_list(struct net_device *dev)
+ {
+ 	struct vmac_priv *ap = netdev_priv(dev);
+-	unsigned long flags, bitmask[2];
+-	int promisc, reg;
++	unsigned long flags;
++	u32 bitmask[2], reg;
++	bool promisc;
+ 
+ 	spin_lock_irqsave(&ap->lock, flags);
+ 
+@@ -1299,7 +1299,7 @@ static const struct net_device_ops vmac_netdev_ops = {
+ 	.ndo_do_ioctl		= vmac_ioctl,
+ 	.ndo_set_mac_address	= eth_mac_addr,
+ 	.ndo_tx_timeout		= vmac_tx_timeout,
+-	.ndo_set_multicast_list = vmac_set_multicast_list,
++	.ndo_set_rx_mode	= vmac_set_multicast_list,
+ 	.ndo_validate_addr	= eth_validate_addr,
+ 	.ndo_change_mtu		= eth_change_mtu,
+ };
+@@ -1346,8 +1346,9 @@ static int __devinit vmac_probe(struct platform_device *pdev)
+ 	/* locking: no concurrency */
+ 
+ 	if (dma_get_mask(&pdev->dev) > DMA_BIT_MASK(32) ||
+-			pdev->dev.coherent_dma_mask > DMA_BIT_MASK(32)) {
+-		dev_err(&pdev->dev, "arcvmac supports only 32-bit DMA addresses\n");
++	    pdev->dev.coherent_dma_mask > DMA_BIT_MASK(32)) {
++		dev_err(&pdev->dev,
++			"arcvmac supports only 32-bit DMA addresses\n");
+ 		return -ENODEV;
+ 	}
+ 
+@@ -1390,14 +1391,11 @@ static int __devinit vmac_probe(struct platform_device *pdev)
+ 	dev->netdev_ops = &vmac_netdev_ops;
+ 	dev->ethtool_ops = &vmac_ethtool_ops;
+ 
+-	dev->flags |= IFF_MULTICAST;
+-
+-	dev->base_addr = (unsigned long)ap->regs; /* TODO */
++	dev->base_addr = (unsigned long)ap->regs;
+ 
+ 	/* prevent buffer chaining, favor speed over space */
+ 	ap->rx_skb_size = ETH_FRAME_LEN + VMAC_BUFFER_PAD;
+ 
+-
+ 	/* private struct functional */
+ 
+ 	/* temporarily map registers to fetch mac addr */
+@@ -1406,7 +1404,7 @@ static int __devinit vmac_probe(struct platform_device *pdev)
+ 		goto err_out;
+ 
+ 	/* mac address intialize, set vmac_open  */
+-	read_mac_reg(dev, dev->dev_addr); /* TODO */
++	read_mac_reg(dev, dev->dev_addr);
+ 
+ 	if (!is_valid_ether_addr(dev->dev_addr))
+ 		random_ether_addr(dev->dev_addr);
+@@ -1414,11 +1412,16 @@ static int __devinit vmac_probe(struct platform_device *pdev)
+ 	err = register_netdev(dev);
+ 	if (err) {
+ 		dev_err(&pdev->dev, "Cannot register net device, aborting.\n");
++		put_register_map(ap);
+ 		goto err_out;
+ 	}
+ 
++#if 0
++	/* release the memory region, till open is called */
++	put_register_map(ap);
++#endif
+ 	dev_info(&pdev->dev, "ARC VMAC at 0x%pP irq %d %pM\n", &mem->start,
+-	    dev->irq, dev->dev_addr);
++		 dev->irq, dev->dev_addr);
+ 	platform_set_drvdata(pdev, ap);
+ 
+ 	return 0;
+@@ -1442,9 +1445,6 @@ static int __devexit vmac_remove(struct platform_device *pdev)
+ 
+ 	/* MAC */
+ 	unregister_netdev(ap->dev);
+-
+-	/* release the memory region */
+-	put_register_map(ap);
+ 	netif_napi_del(&ap->napi);
+ 
+ 	platform_set_drvdata(pdev, NULL);
+@@ -1475,4 +1475,4 @@ module_exit(vmac_exit);
+ 
+ MODULE_LICENSE("GPL");
+ MODULE_DESCRIPTION("ARC VMAC Ethernet driver");
+-MODULE_AUTHOR("afenkart@xxxxxxxxx");
++MODULE_AUTHOR("afenkart@gmail.com");
+diff --git a/drivers/net/arcvmac.h b/drivers/net/arcvmac.h
+index 93d25b8..fed3c9e 100644
+--- a/drivers/net/arcvmac.h
++++ b/drivers/net/arcvmac.h
+@@ -1,10 +1,7 @@
+ /*
+  * ARC VMAC Driver
+  *
+- * Copyright (C) 2003-2006 Codito Technologies, for linux-2.4 port
+- * Copyright (C) 2006-2007 Celunite Inc, for linux-2.6 port
+- * Copyright (C) 2007-2008 Sagem Communications, Fehmi HAFSI
+- * Copyright (C) 2009-2011 Sagem Communications, Andreas Fenkart
++ * Copyright (C) 2009-2012 Andreas Fenkart
+  * All Rights Reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+@@ -21,6 +18,13 @@
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
++ * Initial work taken from arc linux distribution, any bugs are mine
++ *
++ *	-----<snip>-----
++ * Copyright (C) 2003-2006 Codito Technologies, for linux-2.4 port
++ * Copyright (C) 2006-2007 Celunite Inc, for linux-2.6 port
++ * Authors: amit.bhor@celunite.com, sameer.dhavale@celunite.com
++ *	-----<snip>-----
+  */
+ 
+ #ifndef _ARCVMAC_H
+@@ -31,7 +35,7 @@
+ 
+ /* Buffer descriptors */
+ #define TX_BDT_LEN		128    /* Number of receive BD's */
+-#define RX_BDT_LEN		128   /* Number of transmit BD's */
++#define RX_BDT_LEN		128    /* Number of transmit BD's */
+ 
+ /* BD poll rate, in 1024 cycles. @100Mhz: x * 1024 cy * 10ns = 1ms */
+ #define POLLRATE_TIME		200
+@@ -43,7 +47,7 @@
+ /* 14 bytes of ethernet header, 4 bytes VLAN, FCS,
+  * plus extra pad to prevent buffer chaining of
+  * maximum sized ethernet packets (1514 bytes) */
+-#define	VMAC_BUFFER_PAD		(ETH_HLEN + 4 + ETH_FCS_LEN + 4)
++#define VMAC_BUFFER_PAD		(ETH_HLEN + 4 + ETH_FCS_LEN + 4)
+ 
+ /* VMAC register definitions, offsets in bytes */
+ #define VMAC_ID			0x00
+@@ -117,7 +121,7 @@
+ 
+ /* common combinations */
+ #define BD_TX_ERR		(BD_UFLO | BD_LTCL | BD_RETRY_CT | BD_DROP | \
+-		BD_DEFER | BD_CARLOSS)
++				 BD_DEFER | BD_CARLOSS)
+ 
+ 
+ /* arcvmac private data structures */
+@@ -132,7 +136,7 @@ struct dma_fifo {
+ 	int size;
+ };
+ 
+-struct	vmac_priv {
++struct vmac_priv {
+ 	struct net_device *dev;
+ 	struct platform_device *pdev;
+ 
+@@ -140,7 +144,7 @@ struct	vmac_priv {
+ 	spinlock_t lock; /* protects structure plus hw regs of device */
+ 
+ 	/* base address of register set */
+-	char *regs;
++	char __iomem *regs;
+ 	struct resource *mem;
+ 
+ 	/* DMA ring buffers */
+@@ -181,7 +185,7 @@ struct	vmac_priv {
+ 	int duplex;
+ 
+ 	/* debug */
+-	int shutdown;
++	bool shutdown;
+ };
+ 
+ /* DMA ring management */
+@@ -198,7 +202,7 @@ static inline int fifo_used(struct dma_fifo *f);
+ static inline int fifo_inc_ct(int ct, int size);
+ static inline void fifo_dump(struct dma_fifo *fifo);
+ 
+-static inline int fifo_empty(struct dma_fifo *f)
++static inline bool fifo_empty(struct dma_fifo *f)
+ {
+ 	return f->head == f->tail;
+ }
+@@ -225,7 +229,7 @@ static inline int fifo_used(struct dma_fifo *f)
+ 	return used;
+ }
+ 
+-static inline int fifo_full(struct dma_fifo *f)
++static inline bool fifo_full(struct dma_fifo *f)
+ {
+ 	return (fifo_used(f) + 1) == f->size;
+ }
+@@ -252,9 +256,9 @@ static inline void fifo_inc_tail(struct dma_fifo *fifo)
+ /* internal funcs */
+ static inline void fifo_dump(struct dma_fifo *fifo)
+ {
+-	printk(KERN_INFO "fifo: head %d, tail %d, size %d\n", fifo->head,
+-			fifo->tail,
+-			fifo->size);
++	pr_info("fifo: head %d, tail %d, size %d\n", fifo->head,
++		fifo->tail,
++		fifo->size);
+ }
+ 
+ static inline int fifo_inc_ct(int ct, int size)
+-- 
+1.7.10.4
+

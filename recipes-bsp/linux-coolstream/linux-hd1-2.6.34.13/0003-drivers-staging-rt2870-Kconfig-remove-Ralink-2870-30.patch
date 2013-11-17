@@ -1,0 +1,25 @@
+From f8b53ee0782d05b7576ae854cc14032b73e9b40e Mon Sep 17 00:00:00 2001
+From: "[CST] Focus" <focus.cst@gmail.com>
+Date: Tue, 25 Sep 2012 14:55:04 +0400
+Subject: [PATCH 03/16] drivers/staging/rt2870/Kconfig: remove Ralink
+ 2870/3070 dependency on X86
+
+---
+ drivers/staging/rt2870/Kconfig |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/staging/rt2870/Kconfig b/drivers/staging/rt2870/Kconfig
+index 6ea172b..d64b10c 100644
+--- a/drivers/staging/rt2870/Kconfig
++++ b/drivers/staging/rt2870/Kconfig
+@@ -1,6 +1,6 @@
+ config RT2870
+ 	tristate "Ralink 2870/3070 wireless support"
+-	depends on USB && X86 && WLAN
++	depends on USB && WLAN
+ 	select WIRELESS_EXT
+ 	select WEXT_PRIV
+ 	select CRC_CCITT
+-- 
+1.7.10.4
+

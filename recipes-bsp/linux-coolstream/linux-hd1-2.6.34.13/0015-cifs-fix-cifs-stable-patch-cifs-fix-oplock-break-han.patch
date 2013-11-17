@@ -1,0 +1,43 @@
+From 179e8b3287147aedbcda7deac2c672d56528dca9 Mon Sep 17 00:00:00 2001
+From: Suresh Jayaraman <sjayaraman@suse.com>
+Date: Fri, 2 Dec 2011 16:24:56 +0530
+Subject: [PATCH 15/16] cifs: fix cifs stable patch
+ cifs-fix-oplock-break-handling-try-2.patch
+
+The stable release 2.6.32.32 added the upstream commit
+12fed00de963433128b5366a21a55808fab2f756. However, one of the hunks of
+the original patch seems missing from the stable backport which can be
+found here:
+   http://permalink.gmane.org/gmane.linux.kernel.stable/5676
+
+This hunk corresponds to the change in is_valid_oplock_break() at
+fs/cifs/misc.c.
+
+This patch backports the missing hunk and is against
+linux-2.6.32.y stable kernel.
+
+Cc: Steve French <sfrench@us.ibm.com>
+Signed-off-by: Pavel Shilovsky <piastry@etersoft.ru>
+Signed-off-by: Suresh Jayaraman <sjayaraman@suse.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@suse.de>
+---
+ fs/cifs/misc.c |    3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/fs/cifs/misc.c b/fs/cifs/misc.c
+index 1394aa3..e32c163 100644
+--- a/fs/cifs/misc.c
++++ b/fs/cifs/misc.c
+@@ -583,6 +583,9 @@ is_valid_oplock_break(struct smb_hdr *buf, struct TCP_Server_Info *srv)
+ 				pCifsInode->clientCanCacheAll = false;
+ 				if (pSMB->OplockLevel == 0)
+ 					pCifsInode->clientCanCacheRead = false;
++				else if (pSMB->OplockLevel)
++					pCifsInode->clientCanCacheRead = true;
++
+ 				rc = slow_work_enqueue(&netfile->oplock_break);
+ 				if (rc) {
+ 					cERROR(1, "failed to enqueue oplock "
+-- 
+1.7.10.4
+

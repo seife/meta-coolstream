@@ -1,0 +1,22 @@
+From 3dbf20bd86bfba3680a4dee13d43ab3db4e7ee53 Mon Sep 17 00:00:00 2001
+From: "[CST] Focus" <focus.cst@gmail.com>
+Date: Tue, 25 Sep 2012 15:16:38 +0400
+Subject: [PATCH 05/16] build.sh: uncomment make modules
+
+---
+ build.sh |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/build.sh b/build.sh
+index f5b0b56..f20042c 100755
+--- a/build.sh
++++ b/build.sh
+@@ -1,4 +1,4 @@
+ #!/bin/sh
+ make -j8 ARCH=arm CROSS_COMPILE=arm-cx2450x-linux-gnueabi- zImage
+-#make -j8 ARCH=arm CROSS_COMPILE=arm-cx2450x-linux-gnueabi- modules
++make -j8 ARCH=arm CROSS_COMPILE=arm-cx2450x-linux-gnueabi- modules
+ ./mkimage -A arm -O linux -T kernel -C none -a  0x48000 -e  0x48000 -n "Coolstream HDx Kernel" -d arch/arm/boot/zImage uImage
+-- 
+1.7.10.4
+

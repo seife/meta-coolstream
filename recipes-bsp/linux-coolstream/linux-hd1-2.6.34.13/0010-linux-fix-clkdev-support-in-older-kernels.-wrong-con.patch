@@ -1,0 +1,69 @@
+From 3581920dec611d7d83b952560f408ffd027379cc Mon Sep 17 00:00:00 2001
+From: "[CST] Bas" <bas@coolstreamtech.com>
+Date: Wed, 14 Nov 2012 15:39:27 +0800
+Subject: [PATCH 10/16] linux: fix clkdev support in older kernels. wrong
+ config was selected so it was disabled.
+
+---
+ arch/arm/Kconfig             |    2 +-
+ arch/arm/mach-nevis/Makefile |    3 ++-
+ arch/arm/mach-nevis/clock.c  |    4 +++-
+ 3 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index b0ffca0..2c9e7df 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -378,7 +378,7 @@ config ARCH_NEVIS
+ 	select VMSPLIT_2G
+ 	select ARCH_USES_GETTIMEOFFSET
+ 	select ARCH_HAS_HOLES_MEMORYMODEL
+-	select CLKDEV_LOOKUP
++	select COMMON_CLKDEV
+ 	help
+ 	  Support for NXP CX2450x SoC.
+ 
+diff --git a/arch/arm/mach-nevis/Makefile b/arch/arm/mach-nevis/Makefile
+index 904f70e..4498c86 100644
+--- a/arch/arm/mach-nevis/Makefile
++++ b/arch/arm/mach-nevis/Makefile
+@@ -9,7 +9,8 @@ USE_STANDARD_AS_RULE := true
+ 
+ # Object file lists.
+ 
+-obj-y			:= irq.o dma.o mach.o mipidle.o devices.o gpio.o time.o clock.o
++obj-y			:= irq.o dma.o mach.o mipidle.o devices.o gpio.o time.o
++obj-$(CONFIG_COMMON_CLKDEV) += clock.o
+ #obj-y			:= pllc.o
+ obj-$(CONFIG_PCI)	+= pci.o
+ #obj-$(CONFIG_PM)	+= pm.o
+diff --git a/arch/arm/mach-nevis/clock.c b/arch/arm/mach-nevis/clock.c
+index 7ae09be..5eca80c 100644
+--- a/arch/arm/mach-nevis/clock.c
++++ b/arch/arm/mach-nevis/clock.c
+@@ -40,11 +40,13 @@ static struct clk clk_25M = {
+ 	.rate = 25 * 1000 * 1000,
+ };
+ 
++#if 0 /* What to do with this .. */
+ /*
+  * Catch-all default clock to satisfy drivers using the clk API.  We don't
+  * model the actual hardware clocks yet.
+  */
+ static struct clk clk_default;
++#endif
+ 
+ #define CLK(_clk, dev)				\
+ 	{					\
+@@ -58,7 +60,7 @@ static struct clk_lookup lookups[] = {
+ 
+ int __init cx2450x_clk_init(void)
+ {
+-	//clkdev_add_table(lookups, ARRAY_SIZE(lookups));
++	clkdev_add_table(lookups, ARRAY_SIZE(lookups));
+ 
+ 	return 0;
+ }
+-- 
+1.7.10.4
+

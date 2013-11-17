@@ -1,0 +1,25 @@
+From fd1f94e0b47d75efacfc260fed6718b0967c0e27 Mon Sep 17 00:00:00 2001
+From: "[CST] Bas" <bas@coolstreamtech.com>
+Date: Wed, 14 Nov 2012 15:50:10 +0800
+Subject: [PATCH 12/16] drivers/net/arcvmac.c: fix warning.
+
+---
+ drivers/net/arcvmac.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/net/arcvmac.c b/drivers/net/arcvmac.c
+index 906672d..cab9b1d 100644
+--- a/drivers/net/arcvmac.c
++++ b/drivers/net/arcvmac.c
+@@ -768,7 +768,7 @@ static irqreturn_t vmac_intr(int irq, void *dev_instance)
+ 	if (unlikely(ap->shutdown))
+ 		dev_err(&ap->pdev->dev, "ISR during close\n");
+ 
+-	if (unlikely(!status & (RXINT_MASK|MDIO_MASK|ERR_MASK)))
++	if (unlikely(!(status & (RXINT_MASK|MDIO_MASK|ERR_MASK))))
+ 		dev_err(&ap->pdev->dev, "Spurious IRQ\n");
+ 
+ 	if ((status & RXINT_MASK) && (vmac_readl(ap, ENABLE) & RXINT_MASK) &&
+-- 
+1.7.10.4
+

@@ -1,0 +1,33 @@
+From d456b17bff3fa040b87db5c5bf9bc49c29b8ad46 Mon Sep 17 00:00:00 2001
+From: "[CST] Focus" <focus.cst@gmail.com>
+Date: Tue, 25 Sep 2012 15:17:04 +0400
+Subject: [PATCH 06/16] config-2.6.34.13: enable RT2870
+
+---
+ config-2.6.34.13 |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/config-2.6.34.13 b/config-2.6.34.13
+index 862ef1e..4a89a0c 100644
+--- a/config-2.6.34.13
++++ b/config-2.6.34.13
+@@ -1,7 +1,7 @@
+ #
+ # Automatically generated make config: don't edit
+ # Linux kernel version: 2.6.34.13
+-# Wed Sep  5 14:05:30 2012
++# Tue Sep 18 11:59:59 2012
+ #
+ CONFIG_ARM=y
+ CONFIG_SYS_SUPPORTS_APM_EMULATION=y
+@@ -1365,6 +1365,7 @@ CONFIG_STAGING=y
+ # CONFIG_PRISM2_USB is not set
+ # CONFIG_ECHO is not set
+ # CONFIG_OTUS is not set
++CONFIG_RT2870=m
+ # CONFIG_COMEDI is not set
+ # CONFIG_ASUS_OLED is not set
+ CONFIG_RTL8192U=m
+-- 
+1.7.10.4
+

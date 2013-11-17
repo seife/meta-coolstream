@@ -1,0 +1,66 @@
+From 6ff43b3c3d86fbbed17779000e4d334b58997dba Mon Sep 17 00:00:00 2001
+From: "[CST] Focus" <focus.cst@gmail.com>
+Date: Sun, 9 Dec 2012 19:13:37 +0400
+Subject: [PATCH 16/16] config-2.6.34.13: enable nfs server, for image 2.11
+
+---
+ config-2.6.34.13 |   17 ++++++++++++-----
+ 1 file changed, 12 insertions(+), 5 deletions(-)
+
+diff --git a/config-2.6.34.13 b/config-2.6.34.13
+index 4a89a0c..a2eea3f 100644
+--- a/config-2.6.34.13
++++ b/config-2.6.34.13
+@@ -1,7 +1,7 @@
+ #
+ # Automatically generated make config: don't edit
+ # Linux kernel version: 2.6.34.13
+-# Tue Sep 18 11:59:59 2012
++# Wed Dec  5 15:02:44 2012
+ #
+ CONFIG_ARM=y
+ CONFIG_SYS_SUPPORTS_APM_EMULATION=y
+@@ -291,6 +291,7 @@ CONFIG_CPU_CP15_MMU=y
+ CONFIG_ARM_L1_CACHE_SHIFT=5
+ CONFIG_CPU_HAS_PMU=y
+ CONFIG_ARM_ERRATA_411920=y
++CONFIG_COMMON_CLKDEV=y
+ 
+ #
+ # Bus support
+@@ -1419,7 +1420,7 @@ CONFIG_JBD2=y
+ CONFIG_FS_MBCACHE=y
+ # CONFIG_REISERFS_FS is not set
+ # CONFIG_JFS_FS is not set
+-# CONFIG_FS_POSIX_ACL is not set
++CONFIG_FS_POSIX_ACL=y
+ # CONFIG_XFS_FS is not set
+ # CONFIG_GFS2_FS is not set
+ # CONFIG_OCFS2_FS is not set
+@@ -1506,14 +1507,20 @@ CONFIG_NETWORK_FILESYSTEMS=y
+ CONFIG_NFS_FS=y
+ CONFIG_NFS_V3=y
+ # CONFIG_NFS_V3_ACL is not set
+-# CONFIG_NFS_V4 is not set
++CONFIG_NFS_V4=y
++# CONFIG_NFS_V4_1 is not set
+ CONFIG_ROOT_NFS=y
+-# CONFIG_NFSD is not set
++CONFIG_NFSD=y
++CONFIG_NFSD_V3=y
++# CONFIG_NFSD_V3_ACL is not set
++CONFIG_NFSD_V4=y
+ CONFIG_LOCKD=y
+ CONFIG_LOCKD_V4=y
++CONFIG_EXPORTFS=y
+ CONFIG_NFS_COMMON=y
+ CONFIG_SUNRPC=y
+-# CONFIG_RPCSEC_GSS_KRB5 is not set
++CONFIG_SUNRPC_GSS=y
++CONFIG_RPCSEC_GSS_KRB5=y
+ # CONFIG_RPCSEC_GSS_SPKM3 is not set
+ # CONFIG_SMB_FS is not set
+ # CONFIG_CEPH_FS is not set
+-- 
+1.7.10.4
+

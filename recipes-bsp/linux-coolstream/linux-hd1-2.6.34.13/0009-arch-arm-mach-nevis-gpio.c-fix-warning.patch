@@ -1,0 +1,25 @@
+From 366d27da963255ed8be1a46330acbace15bd4ee6 Mon Sep 17 00:00:00 2001
+From: "[CST] Bas" <bas@coolstreamtech.com>
+Date: Wed, 14 Nov 2012 15:15:15 +0800
+Subject: [PATCH 09/16] arch/arm/mach-nevis/gpio.c: fix warning.
+
+---
+ arch/arm/mach-nevis/gpio.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/mach-nevis/gpio.c b/arch/arm/mach-nevis/gpio.c
+index 7e712ce..2fbe676 100644
+--- a/arch/arm/mach-nevis/gpio.c
++++ b/arch/arm/mach-nevis/gpio.c
+@@ -140,7 +140,7 @@ static int cx2450x_gpio_get(struct gpio_chip *chip, unsigned offset)
+ 	struct cx2450x_gpio_chip *cx;
+ 
+ 	cx = container_of(chip, struct cx2450x_gpio_chip, chip);
+-	return !!readl(cx->regbase + PIO_READ_OFFSET) & mask;
++	return !!(readl(cx->regbase + PIO_READ_OFFSET) & mask);
+ }
+ 
+ /*
+-- 
+1.7.10.4
+

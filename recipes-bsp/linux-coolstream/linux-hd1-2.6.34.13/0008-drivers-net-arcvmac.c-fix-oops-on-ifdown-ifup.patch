@@ -1,0 +1,63 @@
+From 3721a2b8e25eaa30383904289c61e8f03b3f4b6b Mon Sep 17 00:00:00 2001
+From: "[CST] Focus" <focus.cst@gmail.com>
+Date: Thu, 18 Oct 2012 13:50:49 +0400
+Subject: [PATCH 08/16] drivers/net/arcvmac.c: fix oops on ifdown/ifup
+
+---
+ drivers/net/arcvmac.c |   16 ++++------------
+ 1 file changed, 4 insertions(+), 12 deletions(-)
+
+diff --git a/drivers/net/arcvmac.c b/drivers/net/arcvmac.c
+index 9e25308..bcf4dc1 100644
+--- a/drivers/net/arcvmac.c
++++ b/drivers/net/arcvmac.c
+@@ -1000,11 +1000,6 @@ static int vmac_open(struct net_device *dev)
+ 	//spin_lock_irqsave(&ap->lock, flags);
+ 	ap->shutdown = false;
+ 
+-#if 0
+-	err = get_register_map(ap);
+-	if (err)
+-		return err;
+-#endif
+ 	vmac_hw_init(dev);
+ 
+ 	/* mac address changed? */
+@@ -1122,8 +1117,6 @@ static int vmac_close(struct net_device *dev)
+ 
+ 	free_buffers_unlocked(dev);
+ 
+-	put_register_map(ap);
+-
+ 	return 0;
+ }
+ 
+@@ -1412,14 +1405,9 @@ static int __devinit vmac_probe(struct platform_device *pdev)
+ 	err = register_netdev(dev);
+ 	if (err) {
+ 		dev_err(&pdev->dev, "Cannot register net device, aborting.\n");
+-		put_register_map(ap);
+ 		goto err_out;
+ 	}
+ 
+-#if 0
+-	/* release the memory region, till open is called */
+-	put_register_map(ap);
+-#endif
+ 	dev_info(&pdev->dev, "ARC VMAC at 0x%pP irq %d %pM\n", &mem->start,
+ 		 dev->irq, dev->dev_addr);
+ 	platform_set_drvdata(pdev, ap);
+@@ -1445,6 +1433,10 @@ static int __devexit vmac_remove(struct platform_device *pdev)
+ 
+ 	/* MAC */
+ 	unregister_netdev(ap->dev);
++
++	/* release the memory region */
++	put_register_map(ap);
++
+ 	netif_napi_del(&ap->napi);
+ 
+ 	platform_set_drvdata(pdev, NULL);
+-- 
+1.7.10.4
+

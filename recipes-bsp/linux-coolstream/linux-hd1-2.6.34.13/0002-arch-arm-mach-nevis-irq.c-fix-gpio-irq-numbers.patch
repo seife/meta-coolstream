@@ -1,0 +1,39 @@
+From a3ecf923a3ca00cb68467d49bb2f17f879737343 Mon Sep 17 00:00:00 2001
+From: "[CST] Focus" <focus.cst@gmail.com>
+Date: Fri, 7 Sep 2012 14:31:42 +0400
+Subject: [PATCH 02/16] arch/arm/mach-nevis/irq.c: fix gpio irq numbers
+
+---
+ arch/arm/mach-nevis/irq.c |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/mach-nevis/irq.c b/arch/arm/mach-nevis/irq.c
+index 69f338a..f762ad5 100644
+--- a/arch/arm/mach-nevis/irq.c
++++ b/arch/arm/mach-nevis/irq.c
+@@ -199,11 +199,13 @@ static void ack_irq_gpio(u32 irq)
+ 
+ static void mask_irq_gpio(u32 irq)
+ {
++	irq -= IRQ_GPIO(0);
+ 	*piointena_reg[irq / 32] &= ~irq_mask[irq % 32];
+ }
+ 
+ static void unmask_irq_gpio(u32 irq)
+ {
++	irq -= IRQ_GPIO(0);
+ 	*piointena_reg[irq / 32] |= irq_mask[irq % 32];
+ }
+ 
+@@ -259,7 +261,7 @@ static int set_type_irq_gpio(u32 irq, u32 type)
+ 
+ static void nevis_irq_handle_gpio_chain(unsigned int irq, struct irq_desc *desc)
+ {
+-	u32 bank, bit, irqno;
++	u32 bank, bit /*, irqno*/;
+ 	u32 active;
+ 
+ 	for (bank = 0; bank < 7; bank++) {
+-- 
+1.7.10.4
+
