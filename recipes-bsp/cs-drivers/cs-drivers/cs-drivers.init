@@ -1,0 +1,98 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          cs-drivers
+# Required-Start:
+# Required-Stop:
+# Should-Start:      udev-cache
+# Should-stop:
+# Default-Start:     S
+# Default-Stop:
+# Short-Description: Load CS drivers.
+# Description:       Load the modules for Coolstream devices.
+### END INIT INFO
+
+im()
+{
+	modname=$1
+	modsane=${1//-/_}
+	params=$(eval echo \$OPT_${modsane})
+	shift
+	file=/lib/modules/${KVER}/${modname}.ko
+	# the CS modules are in /lib/modules/$KVER/*,
+	# own built modules are in /lib/modules/$KVER/kernel/... subdirectories
+	if test -e $file; then
+		/sbin/insmod $file ${params:-$@}
+	else
+		/sbin/modprobe $modname $@
+	fi
+}
+
+# simulate busybox makedevs
+makedevs()
+{
+	DIR=$1
+	while read name type mode uid gid major minor; do
+		test -z "$name" -o "x$name" = "x#" && continue
+		case x$type in
+		x) ;;
+		xd) mkdir -p -m $mode $DIR/$name ;;
+		*) mknod -m $mode $DIR/$name $type $major $minor ;;
+		esac
+	done
+}
+
+case $1 in
+start)
+	read KVER < /proc/sys/kernel/osrelease
+	# set all "option foo ..." as OPT_foo="..." variables
+	eval $(sed -n "/^options\s/{
+		s/^options\s\(\S\+\)\s\(.*\)\$/OPT_\1=\"\2\"/;
+		s/^\(\S\+\)-/\1_/g;
+		s/^\(\S\+\)-/\1_/g;
+		s/^\(\S\+\)-/\1_/g;
+		p }" /etc/modprobe.conf 2>/dev/null)
+	im cs_frontpanel
+	im cnxt_kal
+	im cnxt_base init=1
+	im cnxt_fb cnxtfb_standalone=1 cnxtfb_width=1280 cnxtfb_height=720
+	im cnxt_lnx
+	im cnxt_alsa
+	im cs_control hdd_power=1
+	im cnxt_i2c
+	im cnxt_sata_drv
+	im stv6110 verbose=0
+	im stv090x verbose=0
+	im tda10023
+	im avl2108
+	im max2112
+	im cs_frontend_prop
+	im dvb-core
+	im cs_frontend
+	# <name ><type> <mode> <uid> <gid> <major> <minor>
+	makedevs /dev <<-EOF
+	# is this needed at all?
+	watchdog		c 644 0 0 10	130
+
+	cnxt			d 755 0 0
+
+	cnxt/cnxt_gen_drv	c 644 0 0 102	0
+	notifyq			c 644 0 0 102	1
+	user_kal		c 644 0 0 102	2
+	display			c 644 0 0 238	0
+	# newer drivers and libs
+	cs_control		c 644 0 0 249	0
+	# older drivers
+	cs_control_scart	c 644 0 0 250	0
+	cs_control_pwm		c 644 0 0 251	0
+	iolib			c 644 0 0 253	0
+
+	input			d 755 0 0
+	input/nevis_ir		c 644 0 0 240	0
+
+	fb			d 755 0 0
+	EOF
+	# libcoolstream wants old devfs-style /dev/fb/0... go figure.
+	ln -s ../fb0 /dev/fb/0
+	ln -sf nevis_ir	/dev/input/event0
+	;;
+esac

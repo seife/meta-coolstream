@@ -10,7 +10,7 @@ PACKAGE_ARCH = "${MACHINE_ARCH}"
 
 # inherit module
 
-Pn = "r0"
+Pn = "r1"
 
 PROVIDES += "virtual/stb-hal-libs"
 
@@ -21,6 +21,7 @@ PV = "0.0+git${SRCPV}"
 
 SRC_URI = " \
 	git://c00lstreamtech.de/cst-public-drivers.git \
+	file://cs-drivers.init \
 	file://license \
 "
 
@@ -46,7 +47,7 @@ do_install () {
 	pushd nevis/drivers/${KV_FULL}
 	for i in *; do
 		case $i in
-		block2mtd.ko|cifs.ko|ftdi-sio.ko|fuse.ko|mtdram.ko|pl2303.ko|rt2870sta.ko|usbserial.ko)
+		block2mtd.ko|cifs.ko|ftdi_sio.ko|fuse.ko|mtdram.ko|pl2303.ko|rt2870sta.ko|usbserial.ko|usb-storage.ko|8192cu.ko|8712u.ko)
 			;;
 		*)
 			cp $i ${D}/lib/modules/${KV_FULL}/extra ;;
@@ -57,7 +58,17 @@ do_install () {
 	install -d ${D}/lib/firmware
 	cp -R nevis/libs/* ${D}/lib/
 	cp -R nevis/firmware/* ${D}/lib/firmware
+	# init script
+	install -d ${D}${sysconfdir}/init.d
+	install -m 0755 ${WORKDIR}/cs-drivers.init ${D}${sysconfdir}/init.d/cs-drivers
 }
+
+# initscript
+inherit update-rc.d
+
+INITSCRIPT_NAME = "cs-drivers"
+INITSCRIPT_PARAMS = "start 50 S ."
+
 
 FILES_${PN} = " \
 	/lib/libca-sc.so \
@@ -65,6 +76,7 @@ FILES_${PN} = " \
 	/lib/libnxp.so \
 	/lib/firmware/ \
 	/lib/modules/ \
+	${sysconfdir} \
 "
 
 # do not put the *.so into -dev package
