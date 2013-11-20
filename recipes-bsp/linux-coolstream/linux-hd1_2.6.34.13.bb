@@ -48,6 +48,9 @@ do_configure_prepend() {
 do_install_prepend() {
 	uboot-mkimage -A arm -O linux -T kernel -a 0x048000 -e 0x048000 -C none \
 		-n "CS HD1 Kernel ${PV} (zImage)" -d arch/arm/boot/zImage zImage.img
+	# hack: we replace the zImage with the U-Boot image...
+	mv arch/arm/boot/zImage arch/arm/boot/zImage.orig
+	mv zImage.img arch/arm/boot/zImage
 }
 
 do_install_append() {
