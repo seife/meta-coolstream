@@ -1,0 +1,91 @@
+Idea from here: http://xecdesign.com/compiling-a-kernel/
+original patch: http://xecdesign.com/downloads/linux-qemu/linux-arm.patch
+
+Allows to build a kernel for arm Versatile board, but  with ARMV6 CPU :-)
+
+Index: b/arch/arm/mach-versatile/Kconfig
+===================================================================
+--- a/arch/arm/mach-versatile/Kconfig
++++ b/arch/arm/mach-versatile/Kconfig
+@@ -1,17 +1,15 @@
+ menu "Versatile platform type"
+ 	depends on ARCH_VERSATILE
+ 
+ config ARCH_VERSATILE_PB
+ 	bool "Support Versatile/PB platform"
+-	select CPU_ARM926T
+ 	default y
+ 	help
+ 	  Include support for the ARM(R) Versatile/PB platform.
+ 
+ config MACH_VERSATILE_AB
+ 	bool "Support Versatile/AB platform"
+-	select CPU_ARM926T
+ 	help
+ 	  Include support for the ARM(R) Versatile/AP platform.
+ 
+ endmenu
+Index: b/arch/arm/mm/Kconfig
+===================================================================
+--- a/arch/arm/mm/Kconfig
++++ b/arch/arm/mm/Kconfig
+@@ -105,11 +105,11 @@ config CPU_ARM9TDMI
+ 	  Say Y if you want support for the ARM9TDMI processor.
+ 	  Otherwise, say N.
+ 
+ # ARM920T
+ config CPU_ARM920T
+-	bool "Support ARM920T processor" if ARCH_INTEGRATOR
++	bool "Support ARM920T processor" if ARCH_INTEGRATOR || ARCH_VERSATILE_PB || ARCH_VERSATILE_AB
+ 	select CPU_32v4T
+ 	select CPU_ABRT_EV4T
+ 	select CPU_PABRT_LEGACY
+ 	select CPU_CACHE_V4WT
+ 	select CPU_CACHE_VIVT
+@@ -123,11 +123,11 @@ config CPU_ARM920T
+ 	  Say Y if you want support for the ARM920T processor.
+ 	  Otherwise, say N.
+ 
+ # ARM922T
+ config CPU_ARM922T
+-	bool "Support ARM922T processor" if ARCH_INTEGRATOR
++	bool "Support ARM922T processor" if ARCH_INTEGRATOR || ARCH_VERSATILE_PB || ARCH_VERSATILE_AB
+ 	select CPU_32v4T
+ 	select CPU_ABRT_EV4T
+ 	select CPU_PABRT_LEGACY
+ 	select CPU_CACHE_V4WT
+ 	select CPU_CACHE_VIVT
+@@ -161,18 +161,19 @@ config CPU_ARM925T
+  	  Say Y if you want support for the ARM925T processor.
+  	  Otherwise, say N.
+ 
+ # ARM926T
+ config CPU_ARM926T
+-	bool "Support ARM926T processor" if ARCH_INTEGRATOR || MACH_REALVIEW_EB
++	bool "Support ARM926T processor" if ARCH_INTEGRATOR || MACH_REALVIEW_EB || ARCH_VERSATILE_PB || ARCH_VERSATILE_AB
+ 	select CPU_32v5
+ 	select CPU_ABRT_EV5TJ
+ 	select CPU_PABRT_LEGACY
+ 	select CPU_CACHE_VIVT
+ 	select CPU_CP15_MMU
+ 	select CPU_COPY_V4WB if MMU
+ 	select CPU_TLB_V4WBI if MMU
++	depends on !CPU_V6 && !CPU_V7
+ 	help
+ 	  This is a variant of the ARM920.  It has slightly different
+ 	  instruction sequences for cache and TLB operations.  Curiously,
+ 	  there is no documentation on it at the ARM corporate website.
+ 
+@@ -382,11 +383,11 @@ config CPU_FEROCEON_OLD_ID
+ 	  for which the CPU ID is equal to the ARM926 ID.
+ 	  Relevant for Feroceon-1850 and early Feroceon-2850.
+ 
+ # ARMv6
+ config CPU_V6
+-	bool "Support ARM V6 processor" if ARCH_INTEGRATOR || MACH_REALVIEW_EB || MACH_REALVIEW_PBX || ARCH_DOVE
++	bool "Support ARM V6 processor" if ARCH_INTEGRATOR || MACH_REALVIEW_EB || MACH_REALVIEW_PBX || ARCH_DOVE || ARCH_VERSATILE_PB || ARCH_VERSATILE_AB
+ 	select CPU_32v6
+ 	select CPU_ABRT_EV6
+ 	select CPU_PABRT_V6
+ 	select CPU_CACHE_V6
+ 	select CPU_CACHE_VIPT

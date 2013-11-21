@@ -1,0 +1,33 @@
+Rename the ttyAMA devices to ttyRI to look more like the coolstream
+serial driver -- no need to patch anything in the image :-)
+
+Index: b/drivers/serial/amba-pl011.c
+===================================================================
+--- a/drivers/serial/amba-pl011.c
++++ b/drivers/serial/amba-pl011.c
+@@ -739,11 +739,11 @@ static int __init pl011_console_setup(st
+ 	return uart_set_options(&uap->port, co, baud, parity, bits, flow);
+ }
+ 
+ static struct uart_driver amba_reg;
+ static struct console amba_console = {
+-	.name		= "ttyAMA",
++	.name		= "ttyRI",
+ 	.write		= pl011_console_write,
+ 	.device		= uart_console_device,
+ 	.setup		= pl011_console_setup,
+ 	.flags		= CON_PRINTBUFFER,
+ 	.index		= -1,
+@@ -756,11 +756,11 @@ static struct console amba_console = {
+ #endif
+ 
+ static struct uart_driver amba_reg = {
+ 	.owner			= THIS_MODULE,
+ 	.driver_name		= "ttyAMA",
+-	.dev_name		= "ttyAMA",
++	.dev_name		= "ttyRI",
+ 	.major			= SERIAL_AMBA_MAJOR,
+ 	.minor			= SERIAL_AMBA_MINOR,
+ 	.nr			= UART_NR,
+ 	.cons			= AMBA_CONSOLE,
+ };
