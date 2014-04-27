@@ -125,6 +125,11 @@ IMAGE_CMD_hd1-usbimg () {
 		xz -k "${USBIMG}"
 		;;
 	esac
+
+	mkdir -p ${DEPLOY_DIR_IMAGE}/flashimage/coolstream
+	cp ${DEPLOY_DIR_IMAGE}/${IMAGE_NAME}.rootfs.jffs2.sum ${DEPLOY_DIR_IMAGE}/flashimage/coolstream/system.img
+	cp ${DEPLOY_DIR_IMAGE}/zImage ${DEPLOY_DIR_IMAGE}/flashimage/coolstream/kernel.img
+
 }
 
 # ROOTFS_POSTPROCESS_COMMAND += ""
