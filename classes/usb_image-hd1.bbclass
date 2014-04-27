@@ -23,6 +23,9 @@ inherit image_types
 # |                        |            |                        |
 # 0                      1MiB     1MiB + 20MiB       1MiB + 20Mib + USBIMG_ROOTFS
 
+# This image depends on the rootfs image
+IMAGE_TYPEDEP_hd1-usbimg = "${USBIMG_ROOTFS_TYPE}"
+
 # Boot partition volume id
 BOOTDD_VOLUME_ID ?= "KERNEL"
 
