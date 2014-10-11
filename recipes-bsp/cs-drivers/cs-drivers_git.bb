@@ -2,7 +2,7 @@ DESCRIPTION = "Hardware drivers & libs for Coolstream HD1"
 SECTION = "base"
 PRIORITY = "required"
 LICENSE = "proprietary"
-LIC_FILES_CHKSUM = "file://license;md5=17a6b3d5436a55985b200c725761907a"
+LIC_FILES_CHKSUM = "file://${WORKDIR}/license;md5=17a6b3d5436a55985b200c725761907a"
 
 COMPATIBLE_MACHINE = "coolstream"
 # kernel modules are generally machine specific
@@ -33,11 +33,6 @@ SOLIBS = "${SOLIBSDEV}"
 # These are proprietary binaries generated elsewhere so don't check ldflags
 INSANE_SKIP_${PN} = "ldflags already-stripped"
 INSANE_SKIP_${PN}-dev = "ldflags"
-
-# no idea why do_configure does not find the license file otherwise...
-do_configure_prepend () {
-	cp '${WORKDIR}/license' '${S}'
-}
 
 do_compile () {
 }
