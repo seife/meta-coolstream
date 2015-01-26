@@ -104,13 +104,13 @@ IMAGE_CMD_hd1-usbimg () {
 	mcopy -i ${WORKDIR}/boot.img -v ${WORKDIR}//image-version-info ::
 
 	# Burn Partitions
-	dd if=${WORKDIR}/boot.img of=${USBIMG} conv=notrunc seek=1 bs=$(expr ${IMAGE_ROOTFS_ALIGNMENT} \* 1024) && sync && sync
+	dd if=${WORKDIR}/boot.img of=${USBIMG} conv=notrunc seek=1 bs=$(expr ${IMAGE_ROOTFS_ALIGNMENT} \* 1024)
 	# If USBIMG_ROOTFS_TYPE is a .xz file use xzcat
 	if echo "${USBIMG_ROOTFS_TYPE}" | egrep -q "*\.xz"
 	then
-		xzcat ${USBIMG_ROOTFS} | dd of=${USBIMG} conv=notrunc seek=1 bs=$(expr 1024 \* ${BOOT_SPACE_ALIGNED} + ${IMAGE_ROOTFS_ALIGNMENT} \* 1024) && sync && sync
+		xzcat ${USBIMG_ROOTFS} | dd of=${USBIMG} conv=notrunc seek=1 bs=$(expr 1024 \* ${BOOT_SPACE_ALIGNED} + ${IMAGE_ROOTFS_ALIGNMENT} \* 1024)
 	else
-		dd if=${USBIMG_ROOTFS} of=${USBIMG} conv=notrunc seek=1 bs=$(expr 1024 \* ${BOOT_SPACE_ALIGNED} + ${IMAGE_ROOTFS_ALIGNMENT} \* 1024) && sync && sync
+		dd if=${USBIMG_ROOTFS} of=${USBIMG} conv=notrunc seek=1 bs=$(expr 1024 \* ${BOOT_SPACE_ALIGNED} + ${IMAGE_ROOTFS_ALIGNMENT} \* 1024)
 	fi
 
 	# Optionally apply compression
