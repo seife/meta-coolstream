@@ -13,6 +13,7 @@ PACKAGE_ARCH = "${MACHINE_ARCH}"
 Pn = "r1"
 
 PROVIDES += "virtual/stb-hal-libs"
+DEPENDS = "libbluray"
 
 KV = "2.6.34.13"
 KV_FULL = "${KV}-nevis"
