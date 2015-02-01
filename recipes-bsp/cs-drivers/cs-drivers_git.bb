@@ -9,6 +9,7 @@ COMPATIBLE_MACHINE = "coolstream"
 PACKAGE_ARCH = "${MACHINE_ARCH}"
 
 # inherit module
+inherit gitpkgv
 
 Pn = "r1"
 
@@ -18,7 +19,8 @@ DEPENDS = "libbluray"
 KV = "2.6.34.13"
 KV_FULL = "${KV}-nevis"
 SRCREV = "${AUTOREV}"
-PV = "0.0+git${SRCPV}"
+PV = "${GITPKGVTAG}"
+#PV = "0.0+git${SRCPV}"
 
 SRC_URI = " \
 	git://c00lstreamtech.de/cst-public-drivers.git \
