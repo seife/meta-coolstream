@@ -8,6 +8,8 @@ COMPATIBLE_MACHINE = "coolstream"
 # kernel modules are generally machine specific
 PACKAGE_ARCH = "${MACHINE_ARCH}"
 
+GITPKGV_SUBDIR = "nevis"
+
 # inherit module
 inherit gitpkgv
 
