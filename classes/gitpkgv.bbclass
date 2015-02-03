@@ -72,7 +72,12 @@ def get_git_pkgv(d, use_tags):
 
                 found = True
 
+                subdir = d.getVar('GITPKGV_SUBDIR', True)
+                if not subdir:
+                    subdir = ""
+
                 vars = { 'repodir' : quote(url.localpath),
+                         'subdir' : quote(subdir),
                          'rev' : quote(rev) }
 
                 rev = bb.fetch2.get_srcrev(d).split('+')[1]
@@ -97,7 +102,7 @@ def get_git_pkgv(d, use_tags):
                     try:
                         output = bb.fetch2.runfetchcmd(
                             "cd %(repodir)s && "
-                            "git describe %(rev)s 2>/dev/null" % vars,
+                            "git describe `git rev-list %(rev)s -- %(subdir)s 2>/dev/null|head -1`" % vars,
                             d, quiet=True).strip()
                         ver = gitpkgv_drop_tag_prefix(output)
                     except Exception:
