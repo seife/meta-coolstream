@@ -44,7 +44,8 @@ do_compile () {
 
 do_install () {
 	install -d ${D}/lib/modules/${KV_FULL}/extra
-	pushd nevis/drivers/${KV_FULL}
+	(
+	cd nevis/drivers/${KV_FULL}
 	for i in *; do
 		case $i in
 		block2mtd.ko|cifs.ko|ftdi_sio.ko|fuse.ko|mtdram.ko|pl2303.ko|rt2870sta.ko|usbserial.ko|usb-storage.ko|8192cu.ko|8712u.ko)
@@ -53,7 +54,7 @@ do_install () {
 			cp $i ${D}/lib/modules/${KV_FULL}/extra ;;
 		esac
 	done
-	popd
+	)
 	# install -d ${D}${libdir}
 	install -d ${D}/lib/firmware
 	cp -R nevis/libs/* ${D}/lib/
