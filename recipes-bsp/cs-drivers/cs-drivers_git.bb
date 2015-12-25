@@ -16,12 +16,14 @@ inherit gitpkgv
 Pn = "r1"
 
 PROVIDES += "virtual/stb-hal-libs"
+RPROVIDES_${PN} += "virtual/stb-hal-libs"
+
 DEPENDS = "libbluray"
 
 KV = "2.6.34.13"
 KV_FULL = "${KV}-nevis"
 #SRCREV = "${AUTOREV}"
-SRCREV = "02ce86db81b1a35521d27be938a390dd90656ab8"
+SRCREV = "bf79157bacb2f32b614c169c55f9ba0b35ec9ba2"
 PV = "${GITPKGVTAG}"
 #PV = "0.0+git${SRCPV}"
 
