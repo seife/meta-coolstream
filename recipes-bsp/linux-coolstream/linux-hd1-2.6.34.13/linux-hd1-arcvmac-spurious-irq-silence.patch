@@ -1,0 +1,25 @@
+Index: b/drivers/net/arcvmac.c
+===================================================================
+--- a/drivers/net/arcvmac.c
++++ b/drivers/net/arcvmac.c
+@@ -768,8 +768,11 @@ static irqreturn_t vmac_intr(int irq, vo
+ 	if (unlikely(ap->shutdown))
+ 		dev_err(&ap->pdev->dev, "ISR during close\n");
+ 
++	if (unlikely(!status)) /* shit happens, but I don't want to know */
++		goto out;
++
+ 	if (unlikely(!(status & (TXINT_MASK|RXINT_MASK|MDIO_MASK|ERR_MASK))))
+-		dev_err(&ap->pdev->dev, "Spurious IRQ\n");
++		dev_err(&ap->pdev->dev, "Spurious IRQ status 0x%08x\n", status);
+ 
+ 	if ((status & RXINT_MASK) && (vmac_readl(ap, ENABLE) & RXINT_MASK) &&
+ 	    (ap->dma_rx_head != vmac_readl(ap, MAC_RXRING_HEAD))) {
+@@ -788,6 +791,7 @@ static irqreturn_t vmac_intr(int irq, vo
+ 	if (unlikely(status & ERR_MASK))
+ 		update_error_counters_unlocked(dev, status);
+ 
++ out:
+ 	spin_unlock(&ap->lock);
+ 
+ 	return IRQ_HANDLED;

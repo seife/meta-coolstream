@@ -26,6 +26,7 @@ SRC_URI = "http://www.kernel.org/pub/linux/kernel/v2.6/longterm/v2.6.34/linux-2.
 	file://0015-cifs-fix-cifs-stable-patch-cifs-fix-oplock-break-han.patch \
 	file://0016-config-2.6.34.13-enable-nfs-server-for-image-2.11.patch \
 	file://0001-ARM-6329-1-wire-up-sys_accept4-on-ARM.patch \
+	file://linux-hd1-arcvmac-spurious-irq-silence.patch \
 	file://defconfig \
 "
 
