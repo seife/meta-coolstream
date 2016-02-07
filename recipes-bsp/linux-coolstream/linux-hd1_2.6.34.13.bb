@@ -65,3 +65,25 @@ do_install_append() {
 	# install -d ${D}/lib/firmware
 }
 
+pkg_postinst_kernel-image() {
+#!/bin/sh
+[ -n "$D" ] && exit 0
+ROOTDEV=$(stat -c %04D /)
+if [ "$ROOTDEV" = 0802 ]; then
+	IMG=/boot/zImage-${KV}
+	MNT=`mktemp -d`
+	if mount /dev/sda1 $MNT; then
+		# keep about 1MB free
+		FREE=`df -B 1 /mnt/ | awk 'FNR==2{print (int($4/1024/1024)-1)*1024*1024}'`
+		SIZE=`stat -c %s $IMG`
+		if test $FREE -gt $SIZE; then
+			mv $MNT/zImage.img $MNT/zImage.old
+			cp -a $IMG $MNT/zImage.img
+		fi
+		umount $MNT
+	fi
+	rmdir $MNT
+fi
+exit
+}
+
