@@ -73,19 +73,27 @@ IMAGE_CMD_hd1-usbimg () {
 	ROOTFS_SIZE_ALIGNED=$(expr ${ROOTFS_SIZE} + ${IMAGE_ROOTFS_ALIGNMENT} - 1)
 	ROOTFS_SIZE_ALIGNED=$(expr ${ROOTFS_SIZE_ALIGNED} - ${ROOTFS_SIZE_ALIGNED} % ${IMAGE_ROOTFS_ALIGNMENT})
 	USBIMG_SIZE=$(expr ${IMAGE_ROOTFS_ALIGNMENT} + ${BOOT_SPACE_ALIGNED} + ${ROOTFS_SIZE_ALIGNED})
+	USBIMG_ROOTOFFSET=$(expr ${BOOT_SPACE_ALIGNED} + ${IMAGE_ROOTFS_ALIGNMENT})
 
 	echo "Creating filesystem with Boot partition ${BOOT_SPACE_ALIGNED} KiB and RootFS ${ROOTFS_SIZE_ALIGNED} KiB"
 
+	if dd if=/dev/zero of=/dev/null count=0 conv=sparse >/dev/null 2>&1; then
+		echo "creating sparse image"
+		SPARSE=,sparse
+	else
+		echo "not creating sparse image"
+		SPARSE=""
+	fi
 	# Initialize usbstick image file
-	dd if=/dev/zero of=${USBIMG} bs=1024 count=0 seek=${USBIMG_SIZE}
+	dd if=/dev/zero of=${USBIMG} bs=1k count=0 seek=${USBIMG_SIZE}
 
 	# Create partition table
 	parted -s ${USBIMG} mklabel msdos
 	# Create boot partition and mark it as bootable (not necessary, but does not hurt)
-	parted -s ${USBIMG} unit KiB mkpart primary fat32 ${IMAGE_ROOTFS_ALIGNMENT} $(expr ${BOOT_SPACE_ALIGNED} \+ ${IMAGE_ROOTFS_ALIGNMENT})
+	parted -s ${USBIMG} unit KiB mkpart primary fat32 ${IMAGE_ROOTFS_ALIGNMENT} ${USBIMG_ROOTOFFSET}
 	parted -s ${USBIMG} set 1 boot on
 	# Create rootfs partition to the end of disk
-	parted -s ${USBIMG} -- unit KiB mkpart primary ext2 $(expr ${BOOT_SPACE_ALIGNED} \+ ${IMAGE_ROOTFS_ALIGNMENT}) -1s
+	parted -s ${USBIMG} -- unit KiB mkpart primary ext2 ${USBIMG_ROOTOFFSET} -1s
 	parted ${USBIMG} print
 
 	# Create a vfat image with boot files
@@ -106,13 +114,13 @@ IMAGE_CMD_hd1-usbimg () {
 	mcopy -i ${WORKDIR}/boot.img -v ${WORKDIR}//image-version-info ::
 
 	# Burn Partitions
-	dd if=${WORKDIR}/boot.img of=${USBIMG} conv=notrunc seek=1 bs=$(expr ${IMAGE_ROOTFS_ALIGNMENT} \* 1024)
+	dd if=${WORKDIR}/boot.img of=${USBIMG} conv=notrunc${SPARSE} bs=1k seek=${IMAGE_ROOTFS_ALIGNMENT}
 	# If USBIMG_ROOTFS_TYPE is a .xz file use xzcat
 	if echo "${USBIMG_ROOTFS_TYPE}" | egrep -q "*\.xz"
 	then
-		xzcat ${USBIMG_ROOTFS} | dd of=${USBIMG} conv=notrunc seek=1 bs=$(expr 1024 \* ${BOOT_SPACE_ALIGNED} + ${IMAGE_ROOTFS_ALIGNMENT} \* 1024)
+		xzcat ${USBIMG_ROOTFS} | dd of=${USBIMG} conv=notrunc${SPARSE} bs=1k seek=${USBIMG_ROOTOFFSET}
 	else
-		dd if=${USBIMG_ROOTFS} of=${USBIMG} conv=notrunc seek=1 bs=$(expr 1024 \* ${BOOT_SPACE_ALIGNED} + ${IMAGE_ROOTFS_ALIGNMENT} \* 1024)
+		dd if=${USBIMG_ROOTFS} of=${USBIMG} conv=notrunc${SPARSE} bs=1k seek=${USBIMG_ROOTOFFSET}
 	fi
 
 	# Optionally apply compression
