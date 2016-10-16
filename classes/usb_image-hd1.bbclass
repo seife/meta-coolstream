@@ -37,7 +37,7 @@ IMAGE_ROOTFS_ALIGNMENT = "1024"
 
 # Use an uncompressed ext3 by default as rootfs
 USBIMG_ROOTFS_TYPE ?= "ext3"
-USBIMG_ROOTFS = "${IMAGE_NAME}.rootfs.${USBIMG_ROOTFS_TYPE}"
+USBIMG_ROOTFS = "${DEPLOY_DIR_IMAGE}/${IMAGE_NAME}.rootfs.${USBIMG_ROOTFS_TYPE}"
 
 IMAGE_DEPENDS_hd1-usbimg = " \
 	parted-native \
