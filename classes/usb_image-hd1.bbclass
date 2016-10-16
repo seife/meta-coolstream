@@ -25,6 +25,8 @@ inherit image_types
 
 # This image depends on the rootfs image
 IMAGE_TYPEDEP_hd1-usbimg = "${USBIMG_ROOTFS_TYPE}"
+# hack..... ugly hack... see the end of this file
+IMAGE_TYPEDEP_hd1-usbimg += " jffs2.sum"
 
 # Boot partition volume id
 BOOTDD_VOLUME_ID ?= "KERNEL"
@@ -126,6 +128,7 @@ IMAGE_CMD_hd1-usbimg () {
 		;;
 	esac
 
+	# this does not belong here and needs the ugly IMAGE_TYPEDEP hack...
 	mkdir -p ${DEPLOY_DIR_IMAGE}/flashimage/coolstream
 	cp ${DEPLOY_DIR_IMAGE}/${IMAGE_NAME}.rootfs.jffs2.sum ${DEPLOY_DIR_IMAGE}/flashimage/coolstream/system.img
 	cp ${DEPLOY_DIR_IMAGE}/zImage ${DEPLOY_DIR_IMAGE}/flashimage/coolstream/kernel.img
