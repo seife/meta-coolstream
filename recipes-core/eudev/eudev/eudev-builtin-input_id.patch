@@ -1,0 +1,76 @@
+diff --git a/src/udev/udev-builtin-input_id.c b/src/udev/udev-builtin-input_id.c
+index b14190e..ed4a4c1 100644
+--- a/src/udev/udev-builtin-input_id.c
++++ b/src/udev/udev-builtin-input_id.c
+@@ -33,6 +33,10 @@
+ #include "udev.h"
+ #include "util.h"
+ 
++#ifndef BTN_TRIGGER_HAPPY
++#define BTN_TRIGGER_HAPPY               0x2c0
++#endif
++
+ /* we must use this kernel-compatible implementation */
+ #define BITS_PER_LONG (sizeof(unsigned long) * 8)
+ #define NBITS(x) ((((x)-1)/BITS_PER_LONG)+1)
+@@ -131,16 +135,20 @@ static bool test_pointers(struct udev_device *dev,
+                           const unsigned long* bitmask_abs,
+                           const unsigned long* bitmask_key,
+                           const unsigned long* bitmask_rel,
++#ifdef INPUT_PROP_MAX
+                           const unsigned long* bitmask_props,
++#endif
+                           bool test) {
+         int is_mouse = 0;
+         int is_touchpad = 0;
+         bool ret = false;
+ 
++#ifdef INPUT_PROP_MAX
+         if (test_bit(INPUT_PROP_ACCELEROMETER, bitmask_props)) {
+                 udev_builtin_add_property(dev, test, "ID_INPUT_ACCELEROMETER", "1");
+                 return true;
+         }
++#endif
+ 
+         if (!test_bit(EV_KEY, bitmask_ev)) {
+                 if (test_bit(EV_ABS, bitmask_ev) &&
+@@ -186,10 +194,12 @@ static bool test_pointers(struct udev_device *dev,
+                 }
+         }
+ 
++#ifdef INPUT_PROP_MAX
+         if (test_bit(INPUT_PROP_POINTING_STICK, bitmask_props)) {
+                 udev_builtin_add_property(dev, test, "ID_INPUT_POINTINGSTICK", "1");
+                 ret = true;
+         }
++#endif
+ 
+         if (test_bit(EV_REL, bitmask_ev) &&
+             test_bit(REL_X, bitmask_rel) && test_bit(REL_Y, bitmask_rel) &&
+@@ -263,7 +273,9 @@ static int builtin_input_id(struct udev_device *dev, int argc, char *argv[], boo
+         unsigned long bitmask_abs[NBITS(ABS_MAX)];
+         unsigned long bitmask_key[NBITS(KEY_MAX)];
+         unsigned long bitmask_rel[NBITS(REL_MAX)];
++#ifdef INPUT_PROP_MAX
+         unsigned long bitmask_props[NBITS(INPUT_PROP_MAX)];
++#endif
+         const char *sysname, *devnode;
+         bool is_pointer;
+         bool is_key;
+@@ -282,10 +294,15 @@ static int builtin_input_id(struct udev_device *dev, int argc, char *argv[], boo
+                 get_cap_mask(dev, pdev, "capabilities/abs", bitmask_abs, sizeof(bitmask_abs), test);
+                 get_cap_mask(dev, pdev, "capabilities/rel", bitmask_rel, sizeof(bitmask_rel), test);
+                 get_cap_mask(dev, pdev, "capabilities/key", bitmask_key, sizeof(bitmask_key), test);
++#ifdef INPUT_PROP_MAX
+                 get_cap_mask(dev, pdev, "properties", bitmask_props, sizeof(bitmask_props), test);
++#endif
+                 is_pointer = test_pointers(dev, bitmask_ev, bitmask_abs,
+                                            bitmask_key, bitmask_rel,
+-                                           bitmask_props, test);
++#ifdef INPUT_PROP_MAX
++                                           bitmask_props,
++#endif
++                                           test);
+                 is_key = test_key(dev, bitmask_ev, bitmask_key, test);
+                 /* Some evdev nodes have only a scrollwheel */
+                 if (!is_pointer && !is_key && test_bit(EV_REL, bitmask_ev) &&
