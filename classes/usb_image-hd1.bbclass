@@ -62,6 +62,8 @@ USBIMG = "${DEPLOY_DIR_IMAGE}/${IMAGE_NAME}.rootfs.hd1-usbimg"
 FATPAYLOAD ?= ""
 
 IMAGEDATESTAMP = "${@time.strftime('%Y.%m.%d',time.gmtime())}"
+# https://www.mail-archive.com/yocto@yoctoproject.org/msg29667.html
+IMAGE_CMD_hd1-usbimg[vardepsexclude] = "DATETIME"
 
 IMAGE_CMD_hd1-usbimg () {
 
