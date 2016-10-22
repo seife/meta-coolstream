@@ -23,12 +23,12 @@ DEPENDS = "libbluray"
 KV = "2.6.34.13"
 KV_FULL = "${KV}-nevis"
 #SRCREV = "${AUTOREV}"
-SRCREV = "bf79157bacb2f32b614c169c55f9ba0b35ec9ba2"
+SRCREV = "248bd1a2737ed9cd973d31de246495b5c5b1524f"
 PV = "${GITPKGVTAG}"
 #PV = "0.0+git${SRCPV}"
 
 SRC_URI = " \
-	git://c00lstreamtech.de/cst-public-drivers.git \
+	git://github.com/tuxbox-neutrino/drivers-bin-cst.git;protocol=https \
 	file://cs-drivers.init \
 	file://license \
 "
