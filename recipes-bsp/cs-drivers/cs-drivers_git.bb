@@ -23,7 +23,7 @@ DEPENDS = "libbluray"
 KV = "2.6.34.13"
 KV_FULL = "${KV}-nevis"
 #SRCREV = "${AUTOREV}"
-SRCREV = "051e54beada53e25a1d6429e1c71a71bd81f2f61"
+SRCREV = "03160b97473099e921548cef6bdf681be4ab5eda"
 PV = "${GITPKGVTAG}"
 #PV = "0.0+git${SRCPV}"
 
